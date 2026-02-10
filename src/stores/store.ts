@@ -1,6 +1,34 @@
 import { create } from "zustand";
 import type { Project, TerminalSession } from "../types";
 
+export type TeammateMode = "auto" | "in-process" | "tmux";
+
+export interface AppSettings {
+  useTmux: boolean;
+  teammateMode: TeammateMode;
+  dangerouslySkipPermissions: boolean;
+}
+
+const SETTINGS_KEY = "ccam-settings";
+
+const defaultSettings: AppSettings = {
+  useTmux: false,
+  teammateMode: "auto",
+  dangerouslySkipPermissions: true,
+};
+
+function loadSettings(): AppSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return { ...defaultSettings, ...JSON.parse(raw) };
+  } catch { /* ignore */ }
+  return defaultSettings;
+}
+
+function saveSettings(settings: AppSettings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
 interface AppState {
   projects: Project[];
   setProjects: (projects: Project[]) => void;
@@ -18,6 +46,12 @@ interface AppState {
 
   showAddProject: boolean;
   setShowAddProject: (show: boolean) => void;
+
+  showSettings: boolean;
+  setShowSettings: (show: boolean) => void;
+
+  settings: AppSettings;
+  updateSettings: (patch: Partial<AppSettings>) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -55,4 +89,15 @@ export const useStore = create<AppState>((set) => ({
 
   showAddProject: false,
   setShowAddProject: (show) => set({ showAddProject: show }),
+
+  showSettings: false,
+  setShowSettings: (show) => set({ showSettings: show }),
+
+  settings: loadSettings(),
+  updateSettings: (patch) =>
+    set((state) => {
+      const next = { ...state.settings, ...patch };
+      saveSettings(next);
+      return { settings: next };
+    }),
 }));

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { AddProjectModal } from "./components/Sidebar/AddProjectModal";
+import { SettingsModal } from "./components/Settings/SettingsModal";
 import { TerminalTabs } from "./components/Terminal/TerminalTabs";
 import { TerminalPane } from "./components/Terminal/TerminalPane";
 import { useStore } from "./stores/store";
@@ -15,6 +16,8 @@ function App() {
   const activeSessionId = useStore((s) => s.activeSessionId);
   const updateSessionStatus = useStore((s) => s.updateSessionStatus);
   const showAddProject = useStore((s) => s.showAddProject);
+  const showSettings = useStore((s) => s.showSettings);
+  const settings = useStore((s) => s.settings);
 
   useEffect(() => {
     invoke<Project[]>("get_projects")
@@ -27,6 +30,7 @@ function App() {
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100 overflow-hidden">
       {showAddProject && <AddProjectModal />}
+      {showSettings && <SettingsModal />}
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -67,6 +71,7 @@ function App() {
                   env={project.env_vars}
                   isVisible={activeSessionId === session.id}
                   onExit={() => updateSessionStatus(session.id, "stopped")}
+                  settings={settings}
                 />
               </div>
             );

@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { spawn } from "tauri-pty";
 import type { IPty } from "tauri-pty";
 import "@xterm/xterm/css/xterm.css";
+import type { AppSettings } from "../../stores/store";
 
 interface TerminalPaneProps {
   sessionId: string;
@@ -11,6 +12,7 @@ interface TerminalPaneProps {
   env?: Record<string, string>;
   isVisible: boolean;
   onExit?: () => void;
+  settings: AppSettings;
 }
 
 const THEME = {
@@ -42,6 +44,7 @@ export function TerminalPane({
   env,
   isVisible,
   onExit,
+  settings,
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -150,11 +153,26 @@ export function TerminalPane({
         }
       });
 
-      // Auto-start claude inside tmux for proper claude teams rendering
+      // Auto-start claude with configured settings
       setTimeout(() => {
-        if (ptyAliveRef.current) {
+        if (!ptyAliveRef.current) return;
+
+        // Build claude command with flags
+        const flags: string[] = [];
+        if (settings.dangerouslySkipPermissions) {
+          flags.push("--dangerously-skip-permissions");
+        }
+        if (settings.teammateMode !== "auto") {
+          flags.push(`--teammate-mode ${settings.teammateMode}`);
+        }
+        const claudeCmd = `claude ${flags.join(" ")}`.trim();
+
+        if (settings.useTmux) {
+          // Launch inside tmux for proper claude teams split-pane rendering
           const tmuxSession = `ccam-${sessionId}`;
-          pty.write(`tmux new-session -s "${tmuxSession}" "claude --dangerously-skip-permissions" 2>/dev/null || tmux attach -t "${tmuxSession}"\n`);
+          pty.write(`tmux new-session -s "${tmuxSession}" "${claudeCmd}" 2>/dev/null || tmux attach -t "${tmuxSession}"\n`);
+        } else {
+          pty.write(`${claudeCmd}\n`);
         }
       }, 500);
     } catch (err) {
