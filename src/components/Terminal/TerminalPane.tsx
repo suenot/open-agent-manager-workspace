@@ -150,10 +150,11 @@ export function TerminalPane({
         }
       });
 
-      // Auto-start claude after shell initializes
+      // Auto-start claude inside tmux for proper claude teams rendering
       setTimeout(() => {
         if (ptyAliveRef.current) {
-          pty.write("claude --dangerously-skip-permissions\n");
+          const tmuxSession = `ccam-${sessionId}`;
+          pty.write(`tmux new-session -s "${tmuxSession}" "claude --dangerously-skip-permissions" 2>/dev/null || tmux attach -t "${tmuxSession}"\n`);
         }
       }, 500);
     } catch (err) {
