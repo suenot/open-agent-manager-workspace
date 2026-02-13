@@ -1,4 +1,7 @@
+mod cmdop;
 mod projects;
+mod prompts;
+mod ssh;
 
 use tauri::Manager;
 
@@ -15,11 +18,18 @@ fn toggle_devtools(window: tauri::WebviewWindow) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_pty::init())
         .invoke_handler(tauri::generate_handler![
             projects::get_projects,
             projects::add_project,
             projects::remove_project,
+            prompts::get_prompts,
+            prompts::save_prompts,
+            cmdop::list_cmdop_sessions,
+            cmdop::cmdop_agent_run,
+            cmdop::cmdop_send_input,
+            ssh::list_ssh_keys,
             toggle_devtools,
         ])
         .setup(|app| {

@@ -1,4 +1,5 @@
 import { useStore, type TeammateMode } from "../../stores/store";
+import { CmdopAuthSection } from "./CmdopAuthSection";
 
 export function SettingsModal() {
   const settings = useStore((s) => s.settings);
@@ -116,6 +117,33 @@ export function SettingsModal() {
                 </div>
               </div>
             </label>
+          </section>
+
+          {/* CMDOP section */}
+          <section>
+            <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wider mb-3">
+              CMDOP (Remote Access)
+            </h3>
+
+            {/* API Key */}
+            <div className="mb-4">
+              <label className="block text-sm text-gray-200 mb-1">
+                API Key
+              </label>
+              <input
+                type="password"
+                value={settings.cmdopApiKey}
+                onChange={(e) => updateSettings({ cmdopApiKey: e.target.value })}
+                placeholder="cmd_..."
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm font-mono"
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                API key from CMDOP dashboard. Used for gRPC operations (list machines, run commands).
+              </div>
+            </div>
+
+            {/* OAuth */}
+            <CmdopAuthSection />
           </section>
         </div>
 

@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { Project, TerminalSession } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+import type { Project, TerminalSession, PromptCard, AppError, CmdopAuth } from "../types";
 
 export type TeammateMode = "auto" | "in-process" | "tmux";
 
@@ -7,14 +8,17 @@ export interface AppSettings {
   useTmux: boolean;
   teammateMode: TeammateMode;
   dangerouslySkipPermissions: boolean;
+  cmdopApiKey: string;
 }
 
 const SETTINGS_KEY = "ccam-settings";
+const CMDOP_AUTH_KEY = "ccam-cmdop-auth";
 
 const defaultSettings: AppSettings = {
   useTmux: false,
   teammateMode: "auto",
   dangerouslySkipPermissions: true,
+  cmdopApiKey: "",
 };
 
 function loadSettings(): AppSettings {
@@ -27,6 +31,22 @@ function loadSettings(): AppSettings {
 
 function saveSettings(settings: AppSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function loadCmdopAuth(): CmdopAuth | null {
+  try {
+    const raw = localStorage.getItem(CMDOP_AUTH_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveCmdopAuth(auth: CmdopAuth | null) {
+  if (auth) {
+    localStorage.setItem(CMDOP_AUTH_KEY, JSON.stringify(auth));
+  } else {
+    localStorage.removeItem(CMDOP_AUTH_KEY);
+  }
 }
 
 interface AppState {
@@ -50,8 +70,26 @@ interface AppState {
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
 
+  showPromptQueue: boolean;
+  setShowPromptQueue: (show: boolean) => void;
+
+  prompts: Record<string, PromptCard[]>;
+  loadPrompts: (projectId: string) => Promise<void>;
+  addPrompt: (projectId: string, card: PromptCard) => void;
+  removePrompt: (projectId: string, cardId: string) => void;
+  updatePrompt: (projectId: string, card: PromptCard) => void;
+  reorderPrompts: (projectId: string, cards: PromptCard[]) => void;
+
   settings: AppSettings;
   updateSettings: (patch: Partial<AppSettings>) => void;
+
+  cmdopAuth: CmdopAuth | null;
+  setCmdopAuth: (auth: CmdopAuth | null) => void;
+
+  errors: AppError[];
+  addError: (source: string, message: string, details?: string) => void;
+  clearErrors: () => void;
+  removeError: (id: string) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -93,6 +131,45 @@ export const useStore = create<AppState>((set) => ({
   showSettings: false,
   setShowSettings: (show) => set({ showSettings: show }),
 
+  showPromptQueue: false,
+  setShowPromptQueue: (show) => set({ showPromptQueue: show }),
+
+  prompts: {},
+  loadPrompts: async (projectId) => {
+    try {
+      const cards = await invoke<PromptCard[]>("get_prompts", { projectId });
+      set((state) => ({ prompts: { ...state.prompts, [projectId]: cards } }));
+    } catch (err) {
+      console.error("Failed to load prompts:", err);
+    }
+  },
+  addPrompt: (projectId, card) =>
+    set((state) => {
+      const current = state.prompts[projectId] || [];
+      const next = [...current, card];
+      invoke("save_prompts", { projectId, prompts: next }).catch(console.error);
+      return { prompts: { ...state.prompts, [projectId]: next } };
+    }),
+  removePrompt: (projectId, cardId) =>
+    set((state) => {
+      const current = state.prompts[projectId] || [];
+      const next = current.filter((c) => c.id !== cardId);
+      invoke("save_prompts", { projectId, prompts: next }).catch(console.error);
+      return { prompts: { ...state.prompts, [projectId]: next } };
+    }),
+  updatePrompt: (projectId, card) =>
+    set((state) => {
+      const current = state.prompts[projectId] || [];
+      const next = current.map((c) => (c.id === card.id ? card : c));
+      invoke("save_prompts", { projectId, prompts: next }).catch(console.error);
+      return { prompts: { ...state.prompts, [projectId]: next } };
+    }),
+  reorderPrompts: (projectId, cards) =>
+    set((state) => {
+      invoke("save_prompts", { projectId, prompts: cards }).catch(console.error);
+      return { prompts: { ...state.prompts, [projectId]: cards } };
+    }),
+
   settings: loadSettings(),
   updateSettings: (patch) =>
     set((state) => {
@@ -100,4 +177,22 @@ export const useStore = create<AppState>((set) => ({
       saveSettings(next);
       return { settings: next };
     }),
+
+  cmdopAuth: loadCmdopAuth(),
+  setCmdopAuth: (auth) => {
+    saveCmdopAuth(auth);
+    set({ cmdopAuth: auth });
+  },
+
+  errors: [],
+  addError: (source, message, details) =>
+    set((state) => ({
+      errors: [
+        ...state.errors,
+        { id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now(), source, message, details },
+      ],
+    })),
+  clearErrors: () => set({ errors: [] }),
+  removeError: (id) =>
+    set((state) => ({ errors: state.errors.filter((e) => e.id !== id) })),
 }));

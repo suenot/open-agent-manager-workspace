@@ -6,6 +6,13 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
-    "pty:default"
+    "pty:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://api.cmdop.com/**" },
+        { "url": "https://*.cmdop.com/**" }
+      ]
+    }
   ]
 }

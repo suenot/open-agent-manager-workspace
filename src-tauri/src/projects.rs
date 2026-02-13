@@ -4,6 +4,12 @@ use std::path::PathBuf;
 use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteConfig {
+    pub machine: String,
+    pub remote_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: String,
     pub name: String,
@@ -13,6 +19,8 @@ pub struct Project {
     pub description: Option<String>,
     #[serde(default)]
     pub env_vars: HashMap<String, String>,
+    pub remote: Option<RemoteConfig>,
+    pub cli: Option<String>,
 }
 
 fn default_icon() -> String {

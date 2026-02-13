@@ -6,25 +6,33 @@ export function Sidebar() {
   const projects = useStore((s) => s.projects);
   const setProjects = useStore((s) => s.setProjects);
   const sessions = useStore((s) => s.sessions);
+  const activeSessionId = useStore((s) => s.activeSessionId);
   const addSession = useStore((s) => s.addSession);
   const setActiveSessionId = useStore((s) => s.setActiveSessionId);
   const setShowAddProject = useStore((s) => s.setShowAddProject);
   const setShowSettings = useStore((s) => s.setShowSettings);
   const settings = useStore((s) => s.settings);
 
+  // Derive active project from active session
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeProjectId = activeSession?.projectId ?? null;
+
   const handleProjectClick = (project: Project) => {
-    const existing = sessions.find((s) => s.projectId === project.id);
-    if (existing) {
-      setActiveSessionId(existing.id);
+    // If this project already has sessions, switch to the first one
+    const projectSessions = sessions.filter((s) => s.projectId === project.id);
+    if (projectSessions.length > 0) {
+      setActiveSessionId(projectSessions[0].id);
       return;
     }
 
+    // No sessions yet — create one with default CLI
     addSession({
       id: `session-${Date.now()}`,
       projectId: project.id,
       projectName: project.name,
       projectIcon: project.icon,
       status: "running",
+      cli: project.cli || "claude",
     });
   };
 
@@ -75,7 +83,9 @@ export function Sidebar() {
         )}
 
         {projects.map((project) => {
-          const hasSession = sessions.some((s) => s.projectId === project.id);
+          const projectSessions = sessions.filter((s) => s.projectId === project.id);
+          const hasSession = projectSessions.length > 0;
+          const isActiveProject = activeProjectId === project.id;
           return (
             <div
               key={project.id}
@@ -83,22 +93,37 @@ export function Sidebar() {
               className={`
                 group w-full px-3 py-2.5 text-left flex items-center gap-2.5
                 transition-colors cursor-pointer
-                ${hasSession ? "bg-gray-800/60" : "hover:bg-gray-800/40"}
+                ${isActiveProject ? "bg-blue-600/15 border-l-2 border-blue-500" : hasSession ? "bg-gray-800/60 border-l-2 border-transparent" : "hover:bg-gray-800/40 border-l-2 border-transparent"}
               `}
             >
               <span className="text-lg flex-shrink-0">{project.icon}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-gray-200 truncate">
+                <div className="text-sm text-gray-200 truncate flex items-center gap-1.5">
                   {project.name}
+                  {project.remote && (
+                    <span
+                      className="text-[10px] text-cyan-400 bg-cyan-400/10 px-1 rounded"
+                      title={`Remote: ${project.remote.machine}`}
+                    >
+                      R
+                    </span>
+                  )}
                 </div>
                 {project.description && (
                   <div className="text-xs text-gray-500 truncate">
                     {project.description}
                   </div>
                 )}
+                {project.remote && (
+                  <div className="text-xs text-cyan-500/60 truncate">
+                    {project.remote.machine}
+                  </div>
+                )}
               </div>
               {hasSession && (
-                <span className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
+                <span className="text-[10px] text-gray-500 flex-shrink-0">
+                  {projectSessions.length}
+                </span>
               )}
               {!hasSession && (
                 <button
@@ -119,11 +144,11 @@ export function Sidebar() {
         <span>{activeCount} active session{activeCount !== 1 ? "s" : ""}</span>
         <button
           onClick={() => setShowSettings(true)}
-          className="flex items-center gap-1 text-gray-500 hover:text-gray-200 transition-colors"
+          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-100 transition-colors text-lg"
           title="Settings"
         >
-          {settings.useTmux && <span className="text-green-500" title="tmux enabled">T</span>}
-          <span>&#9881;</span>
+          {settings.useTmux && <span className="text-green-500 text-xs" title="tmux enabled">T</span>}
+          <span>⚙</span>
         </button>
       </div>
     </div>
