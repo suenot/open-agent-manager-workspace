@@ -34,26 +34,27 @@ interface RemoteTerminalPaneProps {
 }
 
 const THEME = {
-  background: "#1a1b26",
-  foreground: "#c0caf5",
-  cursor: "#c0caf5",
-  selectionBackground: "#33467c",
-  black: "#15161e",
-  red: "#f7768e",
-  green: "#9ece6a",
-  yellow: "#e0af68",
-  blue: "#7aa2f7",
-  magenta: "#bb9af7",
-  cyan: "#7dcfff",
-  white: "#a9b1d6",
-  brightBlack: "#414868",
-  brightRed: "#f7768e",
-  brightGreen: "#9ece6a",
-  brightYellow: "#e0af68",
-  brightBlue: "#7aa2f7",
-  brightMagenta: "#bb9af7",
-  brightCyan: "#7dcfff",
-  brightWhite: "#c0caf5",
+  background: "#09090b", // zinc-950
+  foreground: "#e4e4e7", // zinc-200
+  cursor: "#3b82f6",     // blue-500
+  cursorAccent: "#ffffff",
+  selectionBackground: "rgba(59, 130, 246, 0.3)",
+  black: "#27272a",      // zinc-800
+  red: "#ef4444",        // red-500
+  green: "#10b981",      // emerald-500
+  yellow: "#f59e0b",     // amber-500
+  blue: "#3b82f6",       // blue-500
+  magenta: "#d946ef",    // fuchsia-500
+  cyan: "#06b6d4",       // cyan-500
+  white: "#f4f4f5",      // zinc-100
+  brightBlack: "#52525b", // zinc-600
+  brightRed: "#f87171",   // red-400
+  brightGreen: "#34d399", // emerald-400
+  brightYellow: "#fbbf24", // amber-400
+  brightBlue: "#60a5fa",   // blue-400
+  brightMagenta: "#e879f9", // fuchsia-400
+  brightCyan: "#22d3ee",    // cyan-400
+  brightWhite: "#ffffff",
 };
 
 /**
@@ -205,12 +206,14 @@ function RemoteTerminalInner({
 
     const terminal = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 13,
+      fontFamily: '"JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
       theme: THEME,
       scrollback: 10000,
       allowProposedApi: true,
       macOptionIsMeta: true,
+      fontWeight: '500',
+      letterSpacing: 0,
     });
 
     const fitAddon = new FitAddon();

@@ -5,8 +5,16 @@ use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteConfig {
-    pub machine: String,
+    #[serde(rename = "type", default)]
+    pub remote_type: Option<String>, // "cmdop" | "ssh"
+    // CMDOP fields
+    pub machine: Option<String>,
     pub remote_path: String,
+    // SSH fields
+    pub host: Option<String>,
+    pub user: Option<String>,
+    pub port: Option<u16>,
+    pub identity_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

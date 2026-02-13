@@ -39,8 +39,8 @@ pub fn list_ssh_keys() -> Vec<String> {
             true
         })
         .map(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            format!("~/.ssh/{}", name)
+            // Return absolute path so frontend doesn't need to expand ~
+            e.path().to_string_lossy().to_string()
         })
         .collect();
 

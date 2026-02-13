@@ -36,7 +36,8 @@ function App() {
       });
   }, [setProjects, addError]);
 
-  // Global error handlers
+  const toggleSidebar = useStore((s) => s.toggleSidebar);
+
   useEffect(() => {
     const handleError = (e: ErrorEvent) => {
       addError("Window", e.message, `${e.filename}:${e.lineno}:${e.colno}`);
@@ -44,13 +45,22 @@ function App() {
     const handleRejection = (e: PromiseRejectionEvent) => {
       addError("Promise", String(e.reason));
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+
     window.addEventListener("error", handleError);
     window.addEventListener("unhandledrejection", handleRejection);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("error", handleError);
       window.removeEventListener("unhandledrejection", handleRejection);
+      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [addError]);
+  }, [addError, toggleSidebar]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -72,18 +82,18 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-900 text-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans selection:bg-blue-500/30">
       {showAddProject && <AddProjectModal />}
       {showSettings && <SettingsModal />}
       <Sidebar />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 relative">
         <TerminalTabs />
 
-        <div className="flex-1 flex min-h-0">
+        <div className="flex-1 flex min-h-0 relative">
           {/* Terminal area — drop zone for prompt cards */}
           <div
-            className="flex-1 relative"
+            className="flex-1 relative bg-zinc-950"
             onDragOver={(e) => {
               if (e.dataTransfer.types.includes("application/ccam-prompt")) {
                 e.preventDefault();
@@ -95,13 +105,13 @@ function App() {
             {/* Empty state */}
             {!activeSession && (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center text-gray-500">
-                  <div className="text-5xl mb-4 opacity-50">🤖</div>
-                  <div className="text-lg font-medium text-gray-400">
-                    Select a project to start
-                  </div>
-                  <div className="text-sm mt-1">
-                    Click a project in the sidebar to open a Claude Code session
+                <div className="text-center">
+                  <div className="text-6xl mb-6 opacity-20 filter blur-sm animate-pulse">🤖</div>
+                  <h2 className="text-xl font-medium text-zinc-300 mb-2">Ready to Code</h2>
+                  <div className="text-sm text-zinc-500 max-w-md mx-auto leading-relaxed">
+                    Select a project from the sidebar to launch a <span className="text-blue-400 font-mono">claude</span> session.
+                    <br />
+                    Or use <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-xs font-mono text-zinc-400">⌘K</kbd> to open command palette.
                   </div>
                 </div>
               </div>
@@ -123,6 +133,7 @@ function App() {
                   className="absolute inset-0"
                   style={{
                     display: isActive ? "block" : "none",
+                    zIndex: isActive ? 10 : 0
                   }}
                 >
                   {isSsh ? (
@@ -163,31 +174,33 @@ function App() {
 
           {/* Prompt Queue panel (toggleable) */}
           {showPromptQueue && activeSession && (
-            <PromptQueue projectId={activeSession.projectId} />
+            <div className="w-80 border-l border-white/5 bg-zinc-900/50 backdrop-blur-sm">
+              <PromptQueue projectId={activeSession.projectId} />
+            </div>
           )}
         </div>
 
         {/* Status bar */}
-        <div className="flex items-center gap-4 px-4 py-1.5 bg-gray-900 border-t border-gray-700/50 text-xs text-gray-500">
-          <span>
-            {sessions.filter((s) => s.status === "running").length} agent
-            {sessions.filter((s) => s.status === "running").length !== 1
-              ? "s"
-              : ""}{" "}
-            running
-          </span>
-          <span className="ml-auto flex items-center gap-3">
-            <span>ccam v0.1.0</span>
+        <div className="flex items-center gap-4 px-4 py-1.5 bg-zinc-950 border-t border-white/5 text-[10px] text-zinc-500 uppercase tracking-wider font-mono select-none">
+          <div className="flex items-center gap-2">
+            <div className={`w-1.5 h-1.5 rounded-full ${sessions.some(s => s.status === "running") ? "bg-emerald-500 animate-pulse" : "bg-zinc-700"}`} />
+            <span>
+              {sessions.filter((s) => s.status === "running").length} agent(s) active
+            </span>
+          </div>
+
+          <span className="ml-auto flex items-center gap-4">
+            <span className="hover:text-zinc-300 transition-colors cursor-help" title="Version 0.1.0">v0.1.0</span>
             <button
               onClick={async () => {
                 const win = getCurrentWindow();
                 await win.maximize();
                 await invoke("toggle_devtools");
               }}
-              className="hover:text-gray-200 transition-colors cursor-pointer"
+              className="hover:text-blue-400 transition-colors cursor-pointer flex items-center gap-1"
               title="Toggle DevTools (F12)"
             >
-              {"{/}"}
+              <span>DEV</span>
             </button>
           </span>
         </div>

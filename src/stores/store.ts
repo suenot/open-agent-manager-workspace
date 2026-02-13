@@ -54,8 +54,10 @@ interface AppState {
   setProjects: (projects: Project[]) => void;
 
   sessions: TerminalSession[];
+  setSessions: (sessions: TerminalSession[]) => void;
   activeSessionId: string | null;
   setActiveSessionId: (id: string | null) => void;
+
 
   addSession: (session: TerminalSession) => void;
   removeSession: (sessionId: string) => void;
@@ -66,6 +68,14 @@ interface AppState {
 
   showAddProject: boolean;
   setShowAddProject: (show: boolean) => void;
+
+  editingProject: Project | null;
+  setEditingProject: (project: Project | null) => void;
+
+  toggleSidebar: () => void; // For hotkey
+  sidebarVisible: boolean;
+  setSidebarVisible: (visible: boolean) => void;
+  reorderProjects: (projects: Project[]) => void;
 
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
@@ -99,6 +109,7 @@ export const useStore = create<AppState>((set) => ({
   sessions: [],
   activeSessionId: null,
   setActiveSessionId: (id) => set({ activeSessionId: id }),
+  setSessions: (sessions) => set({ sessions }),
 
   addSession: (session) =>
     set((state) => ({
@@ -127,6 +138,21 @@ export const useStore = create<AppState>((set) => ({
 
   showAddProject: false,
   setShowAddProject: (show) => set({ showAddProject: show }),
+
+  editingProject: null,
+  setEditingProject: (project) => set({ editingProject: project }),
+
+  sidebarVisible: true,
+  setSidebarVisible: (visible) => set({ sidebarVisible: visible }),
+  toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
+
+  reorderProjects: (projects) => {
+    set({ projects });
+    invoke("save_projects", { projects }).catch((e) => {
+      // Failing silently if not supported, but user asked for DnD so assuming backend can handle updates
+      console.warn("Failed to save project order:", e);
+    });
+  },
 
   showSettings: false,
   setShowSettings: (show) => set({ showSettings: show }),

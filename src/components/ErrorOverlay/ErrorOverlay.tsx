@@ -31,42 +31,55 @@ export function ErrorOverlay() {
 
   return (
     <>
-      {/* Floating error button */}
-      <button
-        onClick={() => setOpen(!open)}
-        className="fixed bottom-16 right-4 z-50 w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/40 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-        title={`${errors.length} error${errors.length !== 1 ? "s" : ""}`}
-      >
-        <span className="text-sm font-bold">{errors.length}</span>
-      </button>
+      <div className={`fixed bottom-4 right-4 z-50 transition-all duration-300 transform ${open ? "translate-y-[-16px]" : ""}`}>
+        <button
+          onClick={() => setOpen(!open)}
+          className={`
+            relative w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95
+            ${open ? "bg-zinc-700 text-zinc-300" : "bg-red-500 hover:bg-red-400 text-white shadow-red-500/30"}
+          `}
+          title={`${errors.length} error${errors.length !== 1 ? "s" : ""}`}
+        >
+          <span className="font-bold text-sm font-mono">{errors.length}</span>
+          {!open && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-zinc-950 rounded-full animate-ping" />
+          )}
+        </button>
+      </div>
 
       {/* Error panel */}
       {open && (
-        <div className="fixed bottom-28 right-4 z-50 w-[480px] max-h-[60vh] bg-gray-900 border border-red-500/30 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-16 right-4 z-50 w-[500px] max-h-[60vh] bg-zinc-900/95 backdrop-blur-xl border border-red-500/20 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden animate-slide-up ring-1 ring-white/5">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50 bg-red-950/30">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-red-500/5">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              <span className="text-sm font-medium text-red-300">
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              <span className="text-sm font-semibold text-red-200 uppercase tracking-wide">
                 {errors.length} Error{errors.length !== 1 ? "s" : ""}
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <button
                 onClick={handleCopyAll}
-                className="px-2.5 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded transition-colors"
+                className="px-3 py-1 text-xs font-medium bg-white/5 hover:bg-white/10 text-zinc-300 rounded-md transition-all border border-white/5 hover:border-white/10"
               >
-                {copied ? "Copied!" : "Copy All"}
+                {copied ? "✨ Copied!" : "Copy All"}
               </button>
               <button
-                onClick={() => { clearErrors(); setOpen(false); }}
-                className="px-2.5 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded transition-colors"
+                onClick={() => {
+                  clearErrors();
+                  setOpen(false);
+                }}
+                className="px-3 py-1 text-xs font-medium bg-white/5 hover:bg-white/10 text-zinc-300 rounded-md transition-all border border-white/5 hover:border-white/10"
               >
                 Clear All
               </button>
               <button
                 onClick={() => setOpen(false)}
-                className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-200 rounded transition-colors text-sm"
+                className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white rounded-md transition-colors ml-1 hover:bg-white/10"
               >
                 ✕
               </button>
@@ -74,34 +87,35 @@ export function ErrorOverlay() {
           </div>
 
           {/* Error list */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+          <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar bg-zinc-950/30">
             {errors.map((err) => (
               <div
                 key={err.id}
-                className="bg-gray-800 border border-gray-700/50 rounded-lg p-3 group"
+                className="bg-zinc-900/80 border border-white/5 rounded-lg p-3 group hover:border-white/10 transition-colors"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] text-gray-500">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-white/5">
                         {new Date(err.timestamp).toLocaleTimeString()}
                       </span>
-                      <span className="text-[10px] text-red-400 bg-red-400/10 px-1.5 rounded">
+                      <span className="text-[10px] font-bold text-red-300 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/10 uppercase tracking-wider">
                         {err.source}
                       </span>
                     </div>
-                    <div className="text-sm text-gray-200 break-words">
+                    <div className="text-sm font-medium text-zinc-200 break-words leading-relaxed">
                       {err.message}
                     </div>
                     {err.details && (
-                      <pre className="mt-1.5 text-xs text-gray-400 bg-gray-900 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-32">
+                      <pre className="mt-2 text-xs font-mono text-pink-200/80 bg-zinc-950/50 rounded-md p-2.5 overflow-x-auto whitespace-pre-wrap break-words max-h-40 border border-white/5 custom-scrollbar selection:bg-pink-500/30">
                         {err.details}
                       </pre>
                     )}
                   </div>
                   <button
                     onClick={() => removeError(err.id)}
-                    className="text-gray-500 hover:text-gray-300 text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    className="text-zinc-600 hover:text-white text-xs opacity-0 group-hover:opacity-100 transition-all p-1 hover:bg-white/10 rounded"
+                    title="Dismiss"
                   >
                     ✕
                   </button>

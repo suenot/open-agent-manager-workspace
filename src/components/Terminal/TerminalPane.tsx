@@ -20,26 +20,27 @@ interface TerminalPaneProps {
 }
 
 const THEME = {
-  background: "#1a1b26",
-  foreground: "#c0caf5",
-  cursor: "#c0caf5",
-  selectionBackground: "#33467c",
-  black: "#15161e",
-  red: "#f7768e",
-  green: "#9ece6a",
-  yellow: "#e0af68",
-  blue: "#7aa2f7",
-  magenta: "#bb9af7",
-  cyan: "#7dcfff",
-  white: "#a9b1d6",
-  brightBlack: "#414868",
-  brightRed: "#f7768e",
-  brightGreen: "#9ece6a",
-  brightYellow: "#e0af68",
-  brightBlue: "#7aa2f7",
-  brightMagenta: "#bb9af7",
-  brightCyan: "#7dcfff",
-  brightWhite: "#c0caf5",
+  background: "#09090b", // zinc-950
+  foreground: "#e4e4e7", // zinc-200
+  cursor: "#3b82f6",     // blue-500
+  cursorAccent: "#ffffff",
+  selectionBackground: "rgba(59, 130, 246, 0.3)",
+  black: "#27272a",      // zinc-800
+  red: "#ef4444",        // red-500
+  green: "#10b981",      // emerald-500
+  yellow: "#f59e0b",     // amber-500
+  blue: "#3b82f6",       // blue-500
+  magenta: "#d946ef",    // fuchsia-500
+  cyan: "#06b6d4",       // cyan-500
+  white: "#f4f4f5",      // zinc-100
+  brightBlack: "#52525b", // zinc-600
+  brightRed: "#f87171",   // red-400
+  brightGreen: "#34d399", // emerald-400
+  brightYellow: "#fbbf24", // amber-400
+  brightBlue: "#60a5fa",   // blue-400
+  brightMagenta: "#e879f9", // fuchsia-400
+  brightCyan: "#22d3ee",    // cyan-400
+  brightWhite: "#ffffff",
 };
 
 export function TerminalPane({
@@ -72,12 +73,14 @@ export function TerminalPane({
 
     const terminal = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 13,
+      fontFamily: '"JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
       theme: THEME,
       scrollback: 10000,
       allowProposedApi: true,
       macOptionIsMeta: true,
+      fontWeight: '500',
+      letterSpacing: 0,
     });
 
     const fitAddon = new FitAddon();
@@ -158,8 +161,10 @@ export function TerminalPane({
         spawnCmd = "/usr/bin/ssh";
         spawnArgs = [];
         if (sshConfig.identity_file) {
-          const home = spawnEnv.HOME || "/Users/" + (spawnEnv.USER || "");
-          const keyPath = sshConfig.identity_file.replace(/^~/, home);
+          // Key paths from list_ssh_keys are absolute; expand ~ just in case
+          const keyPath = sshConfig.identity_file.startsWith("~")
+            ? sshConfig.identity_file.replace(/^~/, spawnEnv.HOME || "/tmp")
+            : sshConfig.identity_file;
           spawnArgs.push("-i", keyPath);
         }
         if (sshConfig.port && sshConfig.port !== 22) {
@@ -200,8 +205,8 @@ export function TerminalPane({
       pty.onExit(({ exitCode }) => {
         console.log(`[Terminal ${sessionId}] PTY exited with code ${exitCode}`);
         ptyAliveRef.current = false;
-        pty.write = () => {};
-        pty.resize = () => {};
+        pty.write = () => { };
+        pty.resize = () => { };
         terminal.writeln(
           `\r\n\x1b[33m[Process exited with code ${exitCode}]\x1b[0m`,
         );
@@ -262,8 +267,8 @@ export function TerminalPane({
       ptyAliveRef.current = false;
       ptyRegistry.unregister(sessionId);
       if (ptyRef.current) {
-        ptyRef.current.write = () => {};
-        ptyRef.current.resize = () => {};
+        ptyRef.current.write = () => { };
+        ptyRef.current.resize = () => { };
         ptyRef.current.kill();
         ptyRef.current = null;
       }

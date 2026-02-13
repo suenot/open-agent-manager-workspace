@@ -77,23 +77,32 @@ export function CmdopAuthSection() {
   if (cmdopAuth) {
     const isExpired = cmdopAuth.expiresAt < Date.now();
     return (
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <div
-            className={`w-2 h-2 rounded-full ${isExpired ? "bg-yellow-400" : "bg-green-400"}`}
-          />
-          <span className="text-sm text-gray-200">
-            {isExpired ? "Token expired" : "Connected to CMDOP"}
+      <div className="bg-zinc-950/50 p-4 rounded-lg border border-white/5 animate-fade-in">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="relative">
+            <div
+              className={`w-2.5 h-2.5 rounded-full ${isExpired ? "bg-amber-500" : "bg-emerald-500"} shadow-[0_0_8px_currentColor]`}
+            />
+            {!isExpired && <div className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-75" />}
+          </div>
+          <span className={`text-sm font-medium ${isExpired ? "text-amber-200" : "text-emerald-200"}`}>
+            {isExpired ? "Token Expired" : "Connected to CMDOP"}
           </span>
         </div>
-        <div className="text-xs text-gray-500 mb-2 font-mono">
-          Token: {cmdopAuth.accessToken.slice(0, 12)}...
+
+        <div className="flex items-center gap-2 mb-4 bg-zinc-900/50 p-2 rounded border border-white/5">
+          <span className="text-xs text-zinc-500 font-mono">Token:</span>
+          <code className="text-xs text-zinc-300 font-mono bg-white/5 px-1.5 py-0.5 rounded">
+            {cmdopAuth.accessToken.slice(0, 12)}...
+          </code>
         </div>
+
         <button
           onClick={disconnect}
-          className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 rounded transition-colors"
+          className="w-full px-3 py-2 text-xs font-medium text-red-300 hover:text-red-200 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-md transition-all flex items-center justify-center gap-2 group"
         >
-          Disconnect
+          <span>Disconnect</span>
+          <span className="group-hover:translate-x-0.5 transition-transform">→</span>
         </button>
       </div>
     );
@@ -102,31 +111,36 @@ export function CmdopAuthSection() {
   // Polling state — show device code
   if (status === "polling" && deviceCode) {
     return (
-      <div>
-        <div className="text-sm text-gray-200 mb-2">
-          Enter this code to authorize:
+      <div className="bg-zinc-950/50 p-6 rounded-lg border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.1)] animate-fade-in text-center">
+        <div className="text-sm font-medium text-zinc-300 mb-4">
+          Authorize Device
         </div>
-        <div className="bg-gray-900 border border-gray-600 rounded px-4 py-3 text-center mb-3">
-          <div className="text-2xl font-mono font-bold text-blue-400 tracking-widest">
+
+        <div className="bg-zinc-900 border border-blue-500/30 rounded-lg p-4 mb-4 relative overflow-hidden group">
+          <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="text-3xl font-mono font-bold text-blue-400 tracking-[0.2em] relative z-10 selection:bg-blue-500/30">
             {deviceCode.user_code}
           </div>
         </div>
+
         <a
           href={deviceCode.verification_uri}
           target="_blank"
           rel="noopener noreferrer"
-          className="block text-center text-sm text-blue-400 hover:text-blue-300 underline mb-3"
+          className="block w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md shadow-lg shadow-blue-500/20 transition-all active:scale-95 mb-3"
         >
-          Open CMDOP authorization page
+          Open Authorization Page ↗
         </a>
-        <div className="text-xs text-gray-500 text-center">
-          Waiting for authorization...
+
+        <div className="text-xs text-zinc-500 mb-4 animate-pulse">
+          Waiting for approval...
         </div>
+
         <button
           onClick={disconnect}
-          className="mt-3 w-full px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline decoration-zinc-700 hover:decoration-zinc-500"
         >
-          Cancel
+          Cancel Request
         </button>
       </div>
     );
@@ -134,19 +148,36 @@ export function CmdopAuthSection() {
 
   // Idle / Error state
   return (
-    <div>
+    <div className="mt-6 pt-6 border-t border-white/5">
+      <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">Authorization</h4>
+
       {error && (
-        <div className="text-xs text-red-400 mb-2">{error}</div>
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md text-xs text-red-300 flex items-start gap-2">
+          <span className="text-lg leading-none">⚠️</span>
+          <span>{error}</span>
+        </div>
       )}
+
       <button
         onClick={startAuth}
         disabled={status === "requesting"}
-        className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded transition-colors"
+        className="w-full px-4 py-2.5 text-sm font-medium bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-200 hover:text-white border border-white/5 hover:border-white/10 rounded-lg transition-all shadow-sm flex items-center justify-center gap-2"
       >
-        {status === "requesting" ? "Connecting..." : "Connect to CMDOP"}
+        {status === "requesting" ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            Connecting...
+          </>
+        ) : (
+          <>
+            <span>🔐</span> Connect via OAuth
+          </>
+        )}
       </button>
-      <div className="text-xs text-gray-500 mt-2">
-        Opens browser for device authorization. Required for remote projects.
+
+      <div className="text-[10px] text-zinc-600 mt-2 text-center leading-relaxed">
+        Securely connects to CMDOP services via browser authentication.
+        <br />Required for advanced remote features.
       </div>
     </div>
   );
