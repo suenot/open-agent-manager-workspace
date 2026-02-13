@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { AddProjectModal } from "./components/Sidebar/AddProjectModal";
 import { AddServerModal } from "./components/Sidebar/AddServerModal";
+import { ServerListModal } from "./components/Sidebar/ServerListModal";
 import { SettingsModal } from "./components/Settings/SettingsModal";
 import { TerminalTabs } from "./components/Terminal/TerminalTabs";
 import { TerminalPane } from "./components/Terminal/TerminalPane";
@@ -23,6 +24,7 @@ function App() {
   const updateSessionStatus = useStore((s) => s.updateSessionStatus);
   const showAddProject = useStore((s) => s.showAddProject);
   const showAddServer = useStore((s) => s.showAddServer);
+  const showServerList = useStore((s) => s.showServerList);
   const showSettings = useStore((s) => s.showSettings);
   const showPromptQueue = useStore((s) => s.showPromptQueue);
   const removePrompt = useStore((s) => s.removePrompt);
@@ -94,6 +96,7 @@ function App() {
     <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans selection:bg-blue-500/30">
       {showAddProject && <AddProjectModal />}
       {showAddServer && <AddServerModal />}
+      {showServerList && <ServerListModal />}
       {showSettings && <SettingsModal />}
       <Sidebar />
 

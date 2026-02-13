@@ -101,6 +101,8 @@ interface AppState {
 
   showAddServer: boolean;
   setShowAddServer: (show: boolean) => void;
+  showServerList: boolean;
+  setShowServerList: (show: boolean) => void;
   editingServer: Server | null;
   setEditingServer: (server: Server | null) => void;
 
@@ -223,6 +225,8 @@ export const useStore = create<AppState>((set) => ({
 
   showAddServer: false,
   setShowAddServer: (show) => set({ showAddServer: show }),
+  showServerList: false,
+  setShowServerList: (show) => set({ showServerList: show }),
   editingServer: null,
   setEditingServer: (server) => set({ editingServer: server }),
 

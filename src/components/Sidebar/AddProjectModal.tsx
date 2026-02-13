@@ -22,6 +22,8 @@ export function AddProjectModal() {
   const editingProject = useStore((s) => s.editingProject);
   const setEditingProject = useStore((s) => s.setEditingProject);
   const servers = useStore((s) => s.servers);
+  const setShowAddServer = useStore((s) => s.setShowAddServer);
+  const setEditingServer = useStore((s) => s.setEditingServer);
   const addError = useStore((s) => s.addError);
 
   const [mode, setMode] = useState<ProjectMode>("local");
@@ -290,27 +292,40 @@ export function AddProjectModal() {
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
           {/* Server selector (SSH / CMDOP only) */}
-          {mode !== "local" && filteredServers.length > 0 && (
+          {mode !== "local" && (
             <div>
               <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Server</label>
-              <div className="relative">
-                <select
-                  value={selectedServerId}
-                  onChange={(e) => handleServerSelect(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-zinc-950/50 border border-zinc-700/50 rounded-lg text-zinc-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm appearance-none pr-8 transition-all"
-                >
-                  <option value="" className="bg-zinc-900 text-zinc-300">Manual configuration</option>
-                  {filteredServers.map((s) => (
-                    <option key={s.id} value={s.id} className="bg-zinc-900 text-zinc-300">
-                      {s.name} ({s.type === "ssh" ? `${s.user || "root"}@${s.host}` : s.machine})
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 1L5 5L9 1" />
-                  </svg>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <select
+                    value={selectedServerId}
+                    onChange={(e) => handleServerSelect(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-zinc-950/50 border border-zinc-700/50 rounded-lg text-zinc-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm appearance-none pr-8 transition-all"
+                  >
+                    <option value="" className="bg-zinc-900 text-zinc-300">Manual configuration</option>
+                    {filteredServers.map((s) => (
+                      <option key={s.id} value={s.id} className="bg-zinc-900 text-zinc-300">
+                        {s.name} ({s.type === "ssh" ? `${s.user || "root"}@${s.host}` : s.machine})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 1L5 5L9 1" />
+                    </svg>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { setEditingServer(null); setShowAddServer(true); }}
+                  className="w-10 h-10 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 rounded-lg border border-zinc-700/50 transition-all shrink-0"
+                  title="Add server"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
               </div>
             </div>
           )}
