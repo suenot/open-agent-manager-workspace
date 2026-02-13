@@ -92,36 +92,36 @@ export function TerminalTabs() {
 
   // Drag Handlers
   const handleDragStart = (e: React.DragEvent, index: number) => {
-    dragItem.current = index;
+    e.dataTransfer.setData("text/plain", index.toString());
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDragEnter = (e: React.DragEvent, index: number) => {
-    dragOverItem.current = index;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDragEnd = () => {
-    const src = dragItem.current;
-    const dst = dragOverItem.current;
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    const dragIndexStr = e.dataTransfer.getData("text/plain");
+    const dragIndex = parseInt(dragIndexStr, 10);
 
-    if (src !== null && dst !== null && src !== dst && activeProjectId) {
+    if (!isNaN(dragIndex) && dragIndex !== dropIndex && activeProjectId) {
       // Create a copy of project sessions and reorder
       const newProjectSessions = [...projectSessions];
-      const [moved] = newProjectSessions.splice(src, 1);
-      newProjectSessions.splice(dst, 0, moved);
+      const [moved] = newProjectSessions.splice(dragIndex, 1);
+      newProjectSessions.splice(dropIndex, 0, moved);
 
-      // Construct new global session list: keep non-active sessions in place (or filter them out and concat)
-      // Since we only display active project sessions, we can just filter out old ones and append new ones.
-      // But this moves active project sessions to the end of the global list. That's acceptable.
+      // Reconstruct global list
+      // We need to carefully preserve sessions from other projects
+      // The simplest way is to filter out current project sessions and append the new order
+      // This changes global order but keeps per-project order correct which is what matters visually
       const otherSessions = sessions.filter(s => s.projectId !== activeProjectId);
       const newSessions = [...otherSessions, ...newProjectSessions];
 
       setSessions(newSessions);
     }
-    dragItem.current = null;
-    dragOverItem.current = null;
   };
-
 
   // Even if no active project, we render a placeholder header or nothing
   if (!activeProject) return null;
@@ -150,9 +150,8 @@ export function TerminalTabs() {
               key={session.id}
               draggable
               onDragStart={(e) => handleDragStart(e, idx)}
-              onDragEnter={(e) => handleDragEnter(e, idx)}
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, idx)}
               onClick={() => setActiveSessionId(session.id)}
               className={`
                 group relative flex items-center gap-2 px-3 py-1.5 rounded-t-lg cursor-pointer
@@ -167,6 +166,7 @@ export function TerminalTabs() {
               {isActive && (
                 <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 rounded-full shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
               )}
+// ... rest remains same
 
               <span className="text-xs opacity-80">{preset.icon}</span>
               <span className="font-mono text-xs truncate max-w-[100px]">

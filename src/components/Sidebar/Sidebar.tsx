@@ -106,27 +106,28 @@ export function Sidebar() {
 
   // Drag Handlers
   const handleDragStart = (e: React.DragEvent, index: number) => {
-    dragItem.current = index;
-    // Set data for HTML5 DnD comp
+    e.dataTransfer.setData("text/plain", index.toString());
     e.dataTransfer.effectAllowed = "move";
-    // Optional: set a drag image or data
+    // Optional: reduce opacity of dragged item or ghost image
+    // e.currentTarget.style.opacity = '0.5';
   };
 
-  const handleDragEnter = (e: React.DragEvent, index: number) => {
-    dragOverItem.current = index;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDragEnd = () => {
-    const src = dragItem.current;
-    const dst = dragOverItem.current;
-    if (src !== null && dst !== null && src !== dst) {
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    const dragIndexStr = e.dataTransfer.getData("text/plain");
+    const dragIndex = parseInt(dragIndexStr, 10);
+
+    if (!isNaN(dragIndex) && dragIndex !== dropIndex) {
       const copy = [...projects];
-      const [moved] = copy.splice(src, 1);
-      copy.splice(dst, 0, moved);
+      const [moved] = copy.splice(dragIndex, 1);
+      copy.splice(dropIndex, 0, moved);
       reorderProjects(copy);
     }
-    dragItem.current = null;
-    dragOverItem.current = null;
   };
 
   if (!sidebarVisible) return null;
@@ -187,9 +188,8 @@ export function Sidebar() {
               key={project.id}
               draggable
               onDragStart={(e) => handleDragStart(e, index)}
-              onDragEnter={(e) => handleDragEnter(e, index)}
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, index)}
               onClick={() => handleProjectClick(project)}
               onContextMenu={(e) => onContextMenu(e, project)}
               className={`
