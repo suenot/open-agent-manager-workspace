@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, TerminalSession, PromptCard, AppError, CmdopAuth } from "../types";
+import type { Project, TerminalSession, PromptCard, AppError, CmdopAuth, Server, SidebarTab } from "../types";
 
 export type TeammateMode = "auto" | "in-process" | "tmux";
 
@@ -92,6 +92,17 @@ interface AppState {
 
   settings: AppSettings;
   updateSettings: (patch: Partial<AppSettings>) => void;
+
+  servers: Server[];
+  setServers: (servers: Server[]) => void;
+
+  sidebarTab: SidebarTab;
+  setSidebarTab: (tab: SidebarTab) => void;
+
+  showAddServer: boolean;
+  setShowAddServer: (show: boolean) => void;
+  editingServer: Server | null;
+  setEditingServer: (server: Server | null) => void;
 
   cmdopAuth: CmdopAuth | null;
   setCmdopAuth: (auth: CmdopAuth | null) => void;
@@ -203,6 +214,17 @@ export const useStore = create<AppState>((set) => ({
       saveSettings(next);
       return { settings: next };
     }),
+
+  servers: [],
+  setServers: (servers) => set({ servers }),
+
+  sidebarTab: "active" as SidebarTab,
+  setSidebarTab: (tab) => set({ sidebarTab: tab }),
+
+  showAddServer: false,
+  setShowAddServer: (show) => set({ showAddServer: show }),
+  editingServer: null,
+  setEditingServer: (server) => set({ editingServer: server }),
 
   cmdopAuth: loadCmdopAuth(),
   setCmdopAuth: (auth) => {

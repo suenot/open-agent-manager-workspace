@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { AddProjectModal } from "./components/Sidebar/AddProjectModal";
+import { AddServerModal } from "./components/Sidebar/AddServerModal";
 import { SettingsModal } from "./components/Settings/SettingsModal";
 import { TerminalTabs } from "./components/Terminal/TerminalTabs";
 import { TerminalPane } from "./components/Terminal/TerminalPane";
@@ -11,15 +12,17 @@ import { PromptQueue } from "./components/PromptQueue/PromptQueue";
 import { ErrorOverlay } from "./components/ErrorOverlay/ErrorOverlay";
 import { useStore } from "./stores/store";
 import { ptyRegistry } from "./utils/ptyRegistry";
-import type { Project } from "./types";
+import type { Project, Server } from "./types";
 
 function App() {
   const projects = useStore((s) => s.projects);
   const setProjects = useStore((s) => s.setProjects);
+  const setServers = useStore((s) => s.setServers);
   const sessions = useStore((s) => s.sessions);
   const activeSessionId = useStore((s) => s.activeSessionId);
   const updateSessionStatus = useStore((s) => s.updateSessionStatus);
   const showAddProject = useStore((s) => s.showAddProject);
+  const showAddServer = useStore((s) => s.showAddServer);
   const showSettings = useStore((s) => s.showSettings);
   const showPromptQueue = useStore((s) => s.showPromptQueue);
   const removePrompt = useStore((s) => s.removePrompt);
@@ -34,7 +37,13 @@ function App() {
         console.error("Failed to load projects:", err);
         addError("Projects", "Failed to load projects", String(err));
       });
-  }, [setProjects, addError]);
+    invoke<Server[]>("get_servers")
+      .then(setServers)
+      .catch((err) => {
+        console.error("Failed to load servers:", err);
+        addError("Servers", "Failed to load servers", String(err));
+      });
+  }, [setProjects, setServers, addError]);
 
   const toggleSidebar = useStore((s) => s.toggleSidebar);
 
@@ -84,6 +93,7 @@ function App() {
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans selection:bg-blue-500/30">
       {showAddProject && <AddProjectModal />}
+      {showAddServer && <AddServerModal />}
       {showSettings && <SettingsModal />}
       <Sidebar />
 

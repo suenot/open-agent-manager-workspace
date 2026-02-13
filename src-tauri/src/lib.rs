@@ -1,6 +1,7 @@
 mod cmdop;
 mod projects;
 mod prompts;
+mod servers;
 mod ssh;
 
 use tauri::Manager;
@@ -24,12 +25,21 @@ pub fn run() {
             projects::get_projects,
             projects::add_project,
             projects::remove_project,
+            projects::save_projects,
+            projects::archive_project,
+            projects::restore_project,
             prompts::get_prompts,
             prompts::save_prompts,
             cmdop::list_cmdop_sessions,
             cmdop::cmdop_agent_run,
             cmdop::cmdop_send_input,
+            servers::get_servers,
+            servers::add_server,
+            servers::update_server,
+            servers::remove_server,
             ssh::list_ssh_keys,
+            ssh::ssh_mkdir,
+            ssh::ssh_list_dirs,
             toggle_devtools,
         ])
         .setup(|app| {

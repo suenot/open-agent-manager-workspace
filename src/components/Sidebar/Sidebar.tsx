@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../../stores/store";
-import type { Project } from "../../types";
+import type { Project, SidebarTab } from "../../types";
+import { ImportView } from "./ImportView";
 
 export function Sidebar() {
   const projects = useStore((s) => s.projects);
@@ -16,20 +17,24 @@ export function Sidebar() {
   const setShowSettings = useStore((s) => s.setShowSettings);
   const settings = useStore((s) => s.settings);
   const sidebarVisible = useStore((s) => s.sidebarVisible);
-  const toggleSidebar = useStore((s) => s.toggleSidebar);
+  const sidebarTab = useStore((s) => s.sidebarTab);
+  const setSidebarTab = useStore((s) => s.setSidebarTab);
+  const setShowAddServer = useStore((s) => s.setShowAddServer);
+  const setEditingServer = useStore((s) => s.setEditingServer);
+  const addError = useStore((s) => s.addError);
 
   const [width, setWidth] = useState(256);
   const [isResizing, setIsResizing] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, project: Project } | null>(null);
-
-  // Drag and Drop State
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; project: Project } | null>(null);
 
   // Derive active project from active session
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const activeProjectId = activeSession?.projectId ?? null;
   const activeCount = sessions.filter((s) => s.status === "running").length;
+
+  // Filter projects by tab
+  const activeProjects = projects.filter((p) => !p.archived);
+  const archivedProjects = projects.filter((p) => p.archived);
 
   // Resizing Logic
   useEffect(() => {
@@ -62,14 +67,14 @@ export function Sidebar() {
   }, []);
 
   const handleProjectClick = (project: Project) => {
-    // If this project already has sessions, switch to the first one
+    if (project.archived) return; // Don't create sessions from archive
+
     const projectSessions = sessions.filter((s) => s.projectId === project.id);
     if (projectSessions.length > 0) {
       setActiveSessionId(projectSessions[0].id);
       return;
     }
 
-    // No sessions yet — create one with default CLI
     addSession({
       id: `session-${Date.now()}`,
       projectId: project.id,
@@ -80,15 +85,30 @@ export function Sidebar() {
     });
   };
 
-  const handleRemoveProject = async (e: React.MouseEvent | undefined, projectId: string) => {
-    if (e) e.stopPropagation();
+  const handleRemoveProject = async (projectId: string) => {
     try {
-      const updated = await invoke<Project[]>("remove_project", {
-        projectId,
-      });
+      const updated = await invoke<Project[]>("remove_project", { projectId });
       setProjects(updated);
     } catch (err) {
       console.error("Failed to remove project:", err);
+    }
+  };
+
+  const handleArchiveProject = async (projectId: string) => {
+    try {
+      const updated = await invoke<Project[]>("archive_project", { projectId });
+      setProjects(updated);
+    } catch (err) {
+      addError("Projects", "Failed to archive project", String(err));
+    }
+  };
+
+  const handleRestoreProject = async (projectId: string) => {
+    try {
+      const updated = await invoke<Project[]>("restore_project", { projectId });
+      setProjects(updated);
+    } catch (err) {
+      addError("Projects", "Failed to restore project", String(err));
     }
   };
 
@@ -104,12 +124,10 @@ export function Sidebar() {
     setContextMenu({ x: e.clientX, y: e.clientY, project });
   };
 
-  // Drag Handlers
+  // Drag Handlers (only for active tab)
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
     e.dataTransfer.effectAllowed = "move";
-    // Optional: reduce opacity of dragged item or ghost image
-    // e.currentTarget.style.opacity = '0.5';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -123,14 +141,146 @@ export function Sidebar() {
     const dragIndex = parseInt(dragIndexStr, 10);
 
     if (!isNaN(dragIndex) && dragIndex !== dropIndex) {
-      const copy = [...projects];
+      const copy = [...activeProjects];
       const [moved] = copy.splice(dragIndex, 1);
       copy.splice(dropIndex, 0, moved);
-      reorderProjects(copy);
+      // Rebuild full list: reordered active + archived
+      reorderProjects([...copy, ...archivedProjects]);
+    }
+  };
+
+  const getRemoteLabel = (project: Project): string | null => {
+    if (!project.remote) return null;
+    if (project.remote.type === "ssh") {
+      const user = project.remote.user || "root";
+      return `${user}@${project.remote.host}`;
+    }
+    return project.remote.machine || null;
+  };
+
+  const handleAddClick = () => {
+    if (sidebarTab === "import") {
+      setEditingServer(null);
+      setShowAddServer(true);
+    } else {
+      setEditingProject(null);
+      setShowAddProject(true);
     }
   };
 
   if (!sidebarVisible) return null;
+
+  const renderProjectList = (projectList: Project[], isArchive: boolean) => {
+    if (projectList.length === 0) {
+      return (
+        <div className="px-4 py-12 text-center text-sm text-zinc-500 flex flex-col items-center">
+          <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-xl opacity-50 shadow-inner">
+            {isArchive ? "📦" : "📂"}
+          </div>
+          <p className="mb-2 font-medium">{isArchive ? "No archived projects" : "No projects yet"}</p>
+          {!isArchive && (
+            <button
+              onClick={() => { setEditingProject(null); setShowAddProject(true); }}
+              className="text-xs text-blue-400 hover:text-blue-300 transition-colors border-b border-blue-400/30 hover:border-blue-300"
+            >
+              Add your first project
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return projectList.map((project, index) => {
+      const projectSessions = sessions.filter((s) => s.projectId === project.id);
+      const hasSession = projectSessions.length > 0;
+      const isActiveProject = activeProjectId === project.id;
+      const isContextOpen = contextMenu?.project.id === project.id;
+      const remoteLabel = getRemoteLabel(project);
+
+      return (
+        <div
+          key={project.id}
+          draggable={!isArchive}
+          onDragStart={!isArchive ? (e) => handleDragStart(e, index) : undefined}
+          onDragOver={!isArchive ? handleDragOver : undefined}
+          onDrop={!isArchive ? (e) => handleDrop(e, index) : undefined}
+          onClick={() => handleProjectClick(project)}
+          onContextMenu={(e) => onContextMenu(e, project)}
+          className={`
+            group w-full px-3 py-2.5 rounded-lg text-left flex items-center gap-3
+            transition-all duration-200 relative overflow-hidden
+            ${isArchive ? "cursor-default" : "cursor-pointer"}
+            ${isActiveProject || isContextOpen
+              ? "bg-blue-500/10 text-blue-100 shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/20"
+              : isArchive
+                ? "text-zinc-500 hover:bg-white/5"
+                : hasSession
+                  ? "text-zinc-300 hover:bg-white/5 hover:text-white"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+            }
+          `}
+        >
+          {/* Active indicator bar */}
+          {isActiveProject && (
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-blue-500 rounded-r-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+          )}
+
+          <span className={`text-lg flex-shrink-0 transition-transform group-hover:scale-110 duration-200 w-5 h-5 flex items-center justify-center overflow-hidden rounded-sm ${isArchive ? "opacity-50" : ""}`}>
+            {project.icon && project.icon.match(/^(\/|\\|[a-zA-Z]:|http|asset)/) ? (
+              <img src={project.icon} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="select-none">{project.icon || "📁"}</span>
+            )}
+          </span>
+
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate flex items-center gap-2">
+              {project.name}
+              {project.remote && (
+                <span
+                  className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase bg-cyan-950 text-cyan-400 border border-cyan-500/20"
+                  title={`Remote: ${remoteLabel}`}
+                >
+                  {project.remote.type === "ssh" ? "SSH" : "REMOTE"}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              {project.remote ? (
+                <div className="text-[10px] text-cyan-600 truncate font-mono opacity-80">
+                  {remoteLabel}
+                </div>
+              ) : project.description ? (
+                <div className={`text-[11px] truncate ${isActiveProject ? "text-blue-200/60" : "text-zinc-600 group-hover:text-zinc-500"}`}>
+                  {project.description}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Session count badge */}
+          {hasSession && (
+            <span className={`
+              flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-medium transition-all
+              ${isActiveProject
+                ? "bg-blue-500 text-white shadow-sm"
+                : "bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-zinc-200"
+              }
+            `}>
+              {projectSessions.length}
+            </span>
+          )}
+
+          {/* Drag Handle (visible on hover, only for active) */}
+          {!isArchive && (
+            <div className="opacity-0 group-hover:opacity-10 absolute right-1 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing p-1">
+              ⋮⋮
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
 
   return (
     <div
@@ -143,125 +293,42 @@ export function Sidebar() {
         onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}
       />
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-zinc-950/50 backdrop-blur-sm sticky top-0 z-10 shrink-0">
-        <h1 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest font-mono">
-          Projects
-        </h1>
-        <button
-          onClick={() => { setEditingProject(null); setShowAddProject(true); }}
-          className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-all duration-200"
-          title="Add project"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
+      {/* Header with tabs */}
+      <div className="border-b border-white/5 bg-zinc-950/50 backdrop-blur-sm sticky top-0 z-10 shrink-0">
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-1">
+            {(["active", "archive", "import"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setSidebarTab(tab)}
+                className={`px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-widest rounded-md transition-all relative ${
+                  sidebarTab === tab
+                    ? "text-blue-400 bg-blue-500/10"
+                    : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+                }`}
+              >
+                {tab === "active" ? "Active" : tab === "archive" ? "Archive" : "Import"}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleAddClick}
+            className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-all duration-200"
+            title={sidebarTab === "import" ? "Add server" : "Add project"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Project list */}
+      {/* Tab content */}
       <div className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5 custom-scrollbar">
-        {projects.length === 0 && (
-          <div className="px-4 py-12 text-center text-sm text-zinc-500 flex flex-col items-center">
-            <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-xl opacity-50 shadow-inner">
-              📂
-            </div>
-            <p className="mb-2 font-medium">No projects yet</p>
-            <button
-              onClick={() => { setEditingProject(null); setShowAddProject(true); }}
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors border-b border-blue-400/30 hover:border-blue-300"
-            >
-              Add your first project
-            </button>
-          </div>
-        )}
-
-        {projects.map((project, index) => {
-          const projectSessions = sessions.filter((s) => s.projectId === project.id);
-          const hasSession = projectSessions.length > 0;
-          const isActiveProject = activeProjectId === project.id;
-          const isContextOpen = contextMenu?.project.id === project.id;
-
-          return (
-            <div
-              key={project.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, index)}
-              onClick={() => handleProjectClick(project)}
-              onContextMenu={(e) => onContextMenu(e, project)}
-              className={`
-                group w-full px-3 py-2.5 rounded-lg text-left flex items-center gap-3
-                transition-all duration-200 cursor-pointer relative overflow-hidden
-                ${isActiveProject || isContextOpen
-                  ? "bg-blue-500/10 text-blue-100 shadow-[0_0_15px_-3px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/20"
-                  : hasSession
-                    ? "text-zinc-300 hover:bg-white/5 hover:text-white"
-                    : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
-                }
-              `}
-            >
-              {/* Active indicator bar */}
-              {isActiveProject && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-blue-500 rounded-r-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-              )}
-
-              <span className="text-lg flex-shrink-0 transition-transform group-hover:scale-110 duration-200 w-5 h-5 flex items-center justify-center overflow-hidden rounded-sm">
-                {project.icon && (project.icon.match(/^(\/|\\|[a-zA-Z]:|http|asset)/)) ? (
-                  <img src={project.icon} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="select-none">{project.icon || "📁"}</span>
-                )}
-              </span>
-
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate flex items-center gap-2">
-                  {project.name}
-                  {project.remote && (
-                    <span
-                      className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase bg-cyan-950 text-cyan-400 border border-cyan-500/20"
-                      title={`Remote: ${project.remote.machine}`}
-                    >
-                      REMOTE
-                    </span>
-                  )}
-                </div>
-                {/* Only show description or remote info, prioritize minimal look */}
-                <div className="flex items-center gap-2 mt-0.5">
-                  {project.remote ? (
-                    <div className="text-[10px] text-cyan-600 truncate font-mono opacity-80">
-                      {project.remote.machine}
-                    </div>
-                  ) : project.description ? (
-                    <div className={`text-[11px] truncate ${isActiveProject ? "text-blue-200/60" : "text-zinc-600 group-hover:text-zinc-500"}`}>
-                      {project.description}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Session count badge */}
-              {hasSession && (
-                <span className={`
-                  flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-medium transition-all
-                  ${isActiveProject
-                    ? "bg-blue-500 text-white shadow-sm"
-                    : "bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-zinc-200"
-                  }
-                `}>
-                  {projectSessions.length}
-                </span>
-              )}
-
-              {/* Drag Handle (visible on hover) */}
-              <div className="opacity-0 group-hover:opacity-10 absolute right-1 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing p-1">
-                ⋮⋮
-              </div>
-            </div>
-          );
-        })}
+        {sidebarTab === "active" && renderProjectList(activeProjects, false)}
+        {sidebarTab === "archive" && renderProjectList(archivedProjects, true)}
+        {sidebarTab === "import" && <ImportView />}
       </div>
 
       {/* Footer */}
@@ -300,8 +367,23 @@ export function Sidebar() {
           >
             <span>✏️</span> Edit
           </button>
+          {contextMenu.project.archived ? (
+            <button
+              onClick={() => { handleRestoreProject(contextMenu.project.id); setContextMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 flex items-center gap-2"
+            >
+              <span>📤</span> Restore
+            </button>
+          ) : (
+            <button
+              onClick={() => { handleArchiveProject(contextMenu.project.id); setContextMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 flex items-center gap-2"
+            >
+              <span>📦</span> Archive
+            </button>
+          )}
           <button
-            onClick={() => { handleRemoveProject(undefined, contextMenu.project.id); setContextMenu(null); }}
+            onClick={() => { handleRemoveProject(contextMenu.project.id); setContextMenu(null); }}
             className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 flex items-center gap-2"
           >
             <span>🗑️</span> Delete

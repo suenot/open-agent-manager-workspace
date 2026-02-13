@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../../stores/store";
-import type { Project } from "../../types";
+import type { Project, Server } from "../../types";
 
 const CLI_PRESETS = [
   { value: "claude", label: "Claude Code" },
@@ -21,11 +21,15 @@ export function AddProjectModal() {
   const setProjects = useStore((s) => s.setProjects);
   const editingProject = useStore((s) => s.editingProject);
   const setEditingProject = useStore((s) => s.setEditingProject);
+  const servers = useStore((s) => s.servers);
+  const addError = useStore((s) => s.addError);
 
   const [mode, setMode] = useState<ProjectMode>("local");
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [description, setDescription] = useState("");
+  // Server selection
+  const [selectedServerId, setSelectedServerId] = useState("");
   // CMDOP fields
   const [machine, setMachine] = useState("");
   const [remotePath, setRemotePath] = useState("");
@@ -42,6 +46,11 @@ export function AddProjectModal() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Filter servers by current mode
+  const filteredServers = servers.filter((s) =>
+    mode === "ssh" ? s.type === "ssh" : mode === "cmdop" ? s.type === "cmdop" : false
+  );
+
   // Load SSH keys on mount
   useEffect(() => {
     invoke<string[]>("list_ssh_keys")
@@ -54,8 +63,8 @@ export function AddProjectModal() {
     if (editingProject) {
       setName(editingProject.name);
       setDescription(editingProject.description || "");
+      setSelectedServerId(editingProject.server_id || "");
 
-      // Determine mode and populate fields
       if (editingProject.remote) {
         if (editingProject.remote.type === "ssh") {
           setMode("ssh");
@@ -74,9 +83,8 @@ export function AddProjectModal() {
         setPath(editingProject.path);
       }
 
-      // CLI
       if (editingProject.cli) {
-        const preset = CLI_PRESETS.find(p => p.value === editingProject.cli);
+        const preset = CLI_PRESETS.find((p) => p.value === editingProject.cli);
         if (preset) {
           setCliPreset(preset.value);
         } else {
@@ -87,11 +95,11 @@ export function AddProjectModal() {
         setCliPreset("none");
       }
     } else {
-      // Reset for new project
       setMode("local");
       setName("");
       setPath("");
       setDescription("");
+      setSelectedServerId("");
       setMachine("");
       setRemotePath("");
       setSshHost("");
@@ -104,6 +112,39 @@ export function AddProjectModal() {
     }
   }, [editingProject]);
 
+  // Auto-fill from selected server
+  const handleServerSelect = (serverId: string) => {
+    setSelectedServerId(serverId);
+    const server = servers.find((s) => s.id === serverId);
+    if (!server) return;
+
+    if (server.type === "ssh") {
+      setSshHost(server.host || "");
+      setSshUser(server.user || "");
+      setSshPort(server.port?.toString() || "22");
+      setSshKey(server.identity_file || "");
+      // Pre-fill remote path with server's default + project name
+      const basePath = server.default_projects_path.replace(/\/$/, "");
+      setSshPath(name ? `${basePath}/${name}` : basePath + "/");
+    } else {
+      setMachine(server.machine || "");
+      const basePath = server.default_projects_path.replace(/\/$/, "");
+      setRemotePath(name ? `${basePath}/${name}` : basePath + "/");
+    }
+  };
+
+  // Auto-update path suffix when name changes (if server selected)
+  const handleNameChange = (newName: string) => {
+    setName(newName);
+    const server = servers.find((s) => s.id === selectedServerId);
+    if (server && newName.trim()) {
+      const basePath = server.default_projects_path.replace(/\/$/, "");
+      const newPath = `${basePath}/${newName.trim()}`;
+      if (mode === "ssh") setSshPath(newPath);
+      else if (mode === "cmdop") setRemotePath(newPath);
+    }
+  };
+
   const handleClose = () => {
     setShowAddProject(false);
     setEditingProject(null);
@@ -113,42 +154,17 @@ export function AddProjectModal() {
     e.preventDefault();
     setError("");
 
-    if (!name.trim()) {
-      setError("Name is required");
-      return;
-    }
-
-    if (mode === "local" && !path.trim()) {
-      setError("Path is required");
-      return;
-    }
-
+    if (!name.trim()) { setError("Name is required"); return; }
+    if (mode === "local" && !path.trim()) { setError("Path is required"); return; }
     if (mode === "cmdop") {
-      if (!machine.trim()) {
-        setError("Machine name is required");
-        return;
-      }
-      if (!remotePath.trim()) {
-        setError("Remote path is required");
-        return;
-      }
+      if (!machine.trim()) { setError("Machine name is required"); return; }
+      if (!remotePath.trim()) { setError("Remote path is required"); return; }
     }
-
     if (mode === "ssh") {
-      if (!sshHost.trim()) {
-        setError("SSH host is required");
-        return;
-      }
-      if (!sshPath.trim()) {
-        setError("Remote path is required");
-        return;
-      }
+      if (!sshHost.trim()) { setError("SSH host is required"); return; }
+      if (!sshPath.trim()) { setError("Remote path is required"); return; }
     }
-
-    if (cliPreset === "custom" && !customCli.trim()) {
-      setError("Custom CLI command is required");
-      return;
-    }
+    if (cliPreset === "custom" && !customCli.trim()) { setError("Custom CLI command is required"); return; }
 
     const cli = cliPreset === "custom" ? customCli.trim() : cliPreset;
 
@@ -156,7 +172,6 @@ export function AddProjectModal() {
     try {
       let project: Project;
       const baseId = editingProject ? editingProject.id : `proj-${Date.now()}`;
-      // Use existing icon if editing, otherwise default to folder for now (backend might override)
       const baseIcon = editingProject ? editingProject.icon : "📁";
 
       if (mode === "local") {
@@ -178,6 +193,7 @@ export function AddProjectModal() {
           icon: baseIcon,
           description: description.trim() || undefined,
           env_vars: {},
+          server_id: selectedServerId || undefined,
           remote: {
             type: "ssh",
             host: sshHost.trim(),
@@ -196,6 +212,7 @@ export function AddProjectModal() {
           icon: baseIcon,
           description: description.trim() || undefined,
           env_vars: {},
+          server_id: selectedServerId || undefined,
           remote: {
             type: "cmdop",
             machine: machine.trim(),
@@ -207,6 +224,18 @@ export function AddProjectModal() {
 
       const updated = await invoke<Project[]>("add_project", { project });
       setProjects(updated);
+
+      // Auto-mkdir for SSH projects
+      if (mode === "ssh" && sshPath.trim()) {
+        invoke("ssh_mkdir", {
+          host: sshHost.trim(),
+          user: sshUser.trim() || null,
+          port: parseInt(sshPort) || null,
+          identityFile: sshKey || null,
+          remotePath: sshPath.trim(),
+        }).catch((err) => addError("SSH", `mkdir failed: ${err}`));
+      }
+
       handleClose();
     } catch (err) {
       setError(String(err));
@@ -243,11 +272,11 @@ export function AddProjectModal() {
             <button
               key={m}
               type="button"
-              onClick={() => setMode(m)}
+              onClick={() => { setMode(m); setSelectedServerId(""); }}
               className={`flex-1 py-3 text-sm font-medium transition-all relative ${mode === m
                 ? "text-blue-400"
                 : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
-                }`}
+              }`}
             >
               {m === "local" ? "Local" : m === "ssh" ? "SSH" : "CMDOP"}
               {mode === m && (
@@ -260,13 +289,39 @@ export function AddProjectModal() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
+          {/* Server selector (SSH / CMDOP only) */}
+          {mode !== "local" && filteredServers.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Server</label>
+              <div className="relative">
+                <select
+                  value={selectedServerId}
+                  onChange={(e) => handleServerSelect(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-zinc-950/50 border border-zinc-700/50 rounded-lg text-zinc-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm appearance-none pr-8 transition-all"
+                >
+                  <option value="" className="bg-zinc-900 text-zinc-300">Manual configuration</option>
+                  {filteredServers.map((s) => (
+                    <option key={s.id} value={s.id} className="bg-zinc-900 text-zinc-300">
+                      {s.name} ({s.type === "ssh" ? `${s.user || "root"}@${s.host}` : s.machine})
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 1L5 5L9 1" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Name */}
           <div>
             <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Project Name</label>
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               placeholder="my-project"
               autoFocus
               className="w-full px-3 py-2.5 bg-zinc-950/50 border border-zinc-700/50 rounded-lg text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-all"

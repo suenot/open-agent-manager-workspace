@@ -19,7 +19,23 @@ export interface Project {
   env_vars: Record<string, string>;
   remote?: RemoteConfig;
   cli?: string;
+  archived?: boolean;
+  server_id?: string;
 }
+
+export interface Server {
+  id: string;
+  name: string;
+  type: "ssh" | "cmdop";
+  host?: string;
+  user?: string;
+  port?: number;
+  identity_file?: string;
+  machine?: string;
+  default_projects_path: string;
+}
+
+export type SidebarTab = "active" | "archive" | "import";
 
 export interface PromptCard {
   id: string;

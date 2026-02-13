@@ -29,6 +29,9 @@ pub struct Project {
     pub env_vars: HashMap<String, String>,
     pub remote: Option<RemoteConfig>,
     pub cli: Option<String>,
+    #[serde(default)]
+    pub archived: bool,
+    pub server_id: Option<String>,
 }
 
 fn default_icon() -> String {
@@ -57,6 +60,14 @@ fn projects_file(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(file_path)
 }
 
+fn write_projects(file_path: &PathBuf, projects: &Vec<Project>) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(projects)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    std::fs::write(file_path, json)
+        .map_err(|e| format!("Failed to write: {}", e))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn get_projects(app_handle: tauri::AppHandle) -> Result<Vec<Project>, String> {
     let file_path = projects_file(&app_handle)?;
@@ -71,16 +82,13 @@ pub fn add_project(app_handle: tauri::AppHandle, project: Project) -> Result<Vec
     let file_path = projects_file(&app_handle)?;
     let mut projects = get_projects(app_handle.clone())?;
 
-    // Check for duplicate path
-    if projects.iter().any(|p| p.path == project.path) {
+    // Check for duplicate path (only among non-archived)
+    if projects.iter().any(|p| p.path == project.path && !p.archived) {
         return Err(format!("Project with path '{}' already exists", project.path));
     }
 
     projects.push(project);
-    let json = serde_json::to_string_pretty(&projects)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-    std::fs::write(&file_path, json)
-        .map_err(|e| format!("Failed to write: {}", e))?;
+    write_projects(&file_path, &projects)?;
 
     Ok(projects)
 }
@@ -91,11 +99,39 @@ pub fn remove_project(app_handle: tauri::AppHandle, project_id: String) -> Resul
     let mut projects = get_projects(app_handle)?;
 
     projects.retain(|p| p.id != project_id);
+    write_projects(&file_path, &projects)?;
 
-    let json = serde_json::to_string_pretty(&projects)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-    std::fs::write(&file_path, json)
-        .map_err(|e| format!("Failed to write: {}", e))?;
+    Ok(projects)
+}
+
+#[tauri::command]
+pub fn save_projects(app_handle: tauri::AppHandle, projects: Vec<Project>) -> Result<(), String> {
+    let file_path = projects_file(&app_handle)?;
+    write_projects(&file_path, &projects)
+}
+
+#[tauri::command]
+pub fn archive_project(app_handle: tauri::AppHandle, project_id: String) -> Result<Vec<Project>, String> {
+    let file_path = projects_file(&app_handle)?;
+    let mut projects = get_projects(app_handle)?;
+
+    if let Some(p) = projects.iter_mut().find(|p| p.id == project_id) {
+        p.archived = true;
+    }
+    write_projects(&file_path, &projects)?;
+
+    Ok(projects)
+}
+
+#[tauri::command]
+pub fn restore_project(app_handle: tauri::AppHandle, project_id: String) -> Result<Vec<Project>, String> {
+    let file_path = projects_file(&app_handle)?;
+    let mut projects = get_projects(app_handle)?;
+
+    if let Some(p) = projects.iter_mut().find(|p| p.id == project_id) {
+        p.archived = false;
+    }
+    write_projects(&file_path, &projects)?;
 
     Ok(projects)
 }
