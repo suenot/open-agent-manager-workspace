@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useStore } from "../../stores/store";
+import { useStore, getPromptsForProject } from "../../stores/store";
 import type { PromptCard } from "../../types";
 
 interface PromptQueueProps {
@@ -7,7 +7,7 @@ interface PromptQueueProps {
 }
 
 export function PromptQueue({ projectId }: PromptQueueProps) {
-  const prompts = useStore((s) => s.prompts[projectId] || []);
+  const prompts = useStore((s) => getPromptsForProject(s, projectId));
   const loadPrompts = useStore((s) => s.loadPrompts);
   const addPrompt = useStore((s) => s.addPrompt);
   const removePrompt = useStore((s) => s.removePrompt);

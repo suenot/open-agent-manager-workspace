@@ -43,6 +43,16 @@ export interface PromptCard {
   images: string[];
 }
 
+export type TaskStatus = "todo" | "in_progress" | "done";
+
+export interface TaskCard {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  created_at: number;
+}
+
 export interface TerminalSession {
   id: string;
   projectId: string;

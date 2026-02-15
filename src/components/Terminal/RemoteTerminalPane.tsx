@@ -111,23 +111,26 @@ function RemoteTerminalInner({
     terminal.writeln(
       `\x1b[36mConnecting to remote machine: ${remote.machine}\x1b[0m`,
     );
-    terminal.writeln(`\x1b[90mSession: ${cmdopSessionId}\x1b[0m`);
-    terminal.writeln(`\x1b[90mMode: Real-time Streaming (gRPC)\x1b[0m`);
+    terminal.writeln(`\x1b[90mAgent session: ${cmdopSessionId}\x1b[0m`);
+    terminal.writeln(`\x1b[90mStream: ${sessionId}\x1b[0m`);
+    terminal.writeln(`\x1b[90mMode: Real-time Streaming (gRPC, independent PTY)\x1b[0m`);
     terminal.writeln("");
 
     let unlisten: (() => void) | null = null;
 
     const startStream = async () => {
       try {
-        // Start bridge process
+        // Start bridge process — 'connect' mode creates a new independent PTY
         await invoke("cmdop_start_stream", {
           apiKey: apiKeyRef.current,
           sessionId: cmdopSessionId,
+          streamId: sessionId,
+          mode: "attach",
         });
 
         // Listen for output events
         unlisten = await listen<{ type: string; data?: string; status?: string; message?: string }>(
-          `cmdop-event-${cmdopSessionId}`,
+          `cmdop-event-${sessionId}`,
           (event) => {
             const msg = event.payload;
             if (msg.type === "output" && msg.data) {
@@ -150,7 +153,7 @@ function RemoteTerminalInner({
         fitAddon.fit();
         const { cols, rows } = terminal;
         await invoke("cmdop_resize_terminal", {
-          sessionId: cmdopSessionId,
+          streamId: sessionId,
           cols,
           rows,
         });
@@ -167,7 +170,7 @@ function RemoteTerminalInner({
             : `cd ${remote.remote_path || "~"} && ${cli}\n`;
 
           await invoke("cmdop_send_input", {
-            sessionId: cmdopSessionId,
+            streamId: sessionId,
             data: startCmd,
             isBase64: false,
           });
@@ -189,7 +192,7 @@ function RemoteTerminalInner({
     const inputDisposable = terminal.onData(async (data) => {
       try {
         await invoke("cmdop_send_input", {
-          sessionId: cmdopSessionId,
+          streamId: sessionId,
           data,
           isBase64: false,
         });
@@ -205,7 +208,7 @@ function RemoteTerminalInner({
         const b64 = btoa(data);
 
         await invoke("cmdop_send_input", {
-          sessionId: cmdopSessionId,
+          streamId: sessionId,
           data: b64,
           isBase64: true,
         });
@@ -221,17 +224,19 @@ function RemoteTerminalInner({
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(async () => {
         try {
-          fitAddon.fit();
-          const { cols, rows } = terminal;
+          if (!terminalRef.current || !fitAddonRef.current) return;
+          fitAddonRef.current.fit();
+          const { cols, rows } = terminalRef.current;
           await invoke("cmdop_resize_terminal", {
-            sessionId: cmdopSessionId,
+            streamId: sessionId,
             cols,
             rows,
           });
-        } catch {
-          // ignore
+          console.log(`[RemoteTerminal ${sessionId}] resized to ${cols}x${rows}`);
+        } catch (err) {
+          console.warn("[RemoteTerminal] resize error:", err);
         }
-      }, 100);
+      }, 50);
     };
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -241,9 +246,16 @@ function RemoteTerminalInner({
         }
       }
     });
-    resizeObserver.observe(containerRef.current);
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Explicit window resize listener for extra safety
+    window.addEventListener("resize", handleResize);
 
     return () => {
+      window.removeEventListener("resize", handleResize);
       if (unlisten) unlisten();
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
@@ -256,7 +268,7 @@ function RemoteTerminalInner({
       initializedRef.current = false;
 
       // Stop the bridge process
-      invoke("cmdop_stop_stream", { sessionId: cmdopSessionId }).catch(console.error);
+      invoke("cmdop_stop_stream", { streamId: sessionId }).catch(console.error);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, cmdopSessionId, remote.machine]);
@@ -270,7 +282,7 @@ function RemoteTerminalInner({
         if (terminalRef.current) {
           const { cols, rows } = terminalRef.current;
           invoke("cmdop_resize_terminal", {
-            sessionId: cmdopSessionId,
+            streamId: sessionId,
             cols,
             rows,
           }).catch(console.error);
@@ -280,7 +292,7 @@ function RemoteTerminalInner({
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [isVisible, cmdopSessionId]);
+  }, [isVisible, sessionId]);
 
   // Window resize
   useEffect(() => {
@@ -291,7 +303,7 @@ function RemoteTerminalInner({
         if (terminalRef.current) {
           const { cols, rows } = terminalRef.current;
           invoke("cmdop_resize_terminal", {
-            sessionId: cmdopSessionId,
+            streamId: sessionId,
             cols,
             rows,
           }).catch(console.error);
@@ -302,7 +314,7 @@ function RemoteTerminalInner({
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [isVisible, cmdopSessionId]);
+  }, [isVisible, sessionId]);
 
   return (
     <div

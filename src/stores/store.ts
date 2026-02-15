@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, TerminalSession, PromptCard, AppError, CmdopAuth, Server, SidebarTab } from "../types";
+import type { Project, TerminalSession, PromptCard, TaskCard, AppError, CmdopAuth, Server, SidebarTab } from "../types";
 
 export type TeammateMode = "auto" | "in-process" | "tmux";
 
@@ -58,7 +58,6 @@ interface AppState {
   activeSessionId: string | null;
   setActiveSessionId: (id: string | null) => void;
 
-
   addSession: (session: TerminalSession) => void;
   removeSession: (sessionId: string) => void;
   updateSessionStatus: (
@@ -90,6 +89,15 @@ interface AppState {
   updatePrompt: (projectId: string, card: PromptCard) => void;
   reorderPrompts: (projectId: string, cards: PromptCard[]) => void;
 
+  tasks: Record<string, TaskCard[]>;
+  showTaskPanel: boolean;
+  setShowTaskPanel: (show: boolean) => void;
+  loadTasks: (projectId: string) => Promise<void>;
+  addTask: (projectId: string, card: TaskCard) => void;
+  removeTask: (projectId: string, cardId: string) => void;
+  updateTask: (projectId: string, card: TaskCard) => void;
+  reorderTasks: (projectId: string, cards: TaskCard[]) => void;
+
   settings: AppSettings;
   updateSettings: (patch: Partial<AppSettings>) => void;
 
@@ -115,7 +123,9 @@ interface AppState {
   removeError: (id: string) => void;
 }
 
-export const useStore = create<AppState>((set) => ({
+const STABLE_EMPTY_ARRAY: any[] = [];
+
+export const useStore = create<AppState>((set, get) => ({
   projects: [],
   setProjects: (projects) => set({ projects }),
 
@@ -162,7 +172,6 @@ export const useStore = create<AppState>((set) => ({
   reorderProjects: (projects) => {
     set({ projects });
     invoke("save_projects", { projects }).catch((e) => {
-      // Failing silently if not supported, but user asked for DnD so assuming backend can handle updates
       console.warn("Failed to save project order:", e);
     });
   },
@@ -209,6 +218,44 @@ export const useStore = create<AppState>((set) => ({
       return { prompts: { ...state.prompts, [projectId]: cards } };
     }),
 
+  tasks: {},
+  showTaskPanel: false,
+  setShowTaskPanel: (show) => set({ showTaskPanel: show }),
+  loadTasks: async (projectId) => {
+    try {
+      const cards = await invoke<TaskCard[]>("get_tasks", { projectId });
+      set((state) => ({ tasks: { ...state.tasks, [projectId]: cards } }));
+    } catch (err) {
+      console.error("Failed to load tasks:", err);
+    }
+  },
+  addTask: (projectId, card) =>
+    set((state) => {
+      const current = state.tasks[projectId] || [];
+      const next = [...current, card];
+      invoke("save_tasks", { projectId, tasks: next }).catch(console.error);
+      return { tasks: { ...state.tasks, [projectId]: next } };
+    }),
+  removeTask: (projectId, cardId) =>
+    set((state) => {
+      const current = state.tasks[projectId] || [];
+      const next = current.filter((c) => c.id !== cardId);
+      invoke("save_tasks", { projectId, tasks: next }).catch(console.error);
+      return { tasks: { ...state.tasks, [projectId]: next } };
+    }),
+  updateTask: (projectId, card) =>
+    set((state) => {
+      const current = state.tasks[projectId] || [];
+      const next = current.map((c) => (c.id === card.id ? card : c));
+      invoke("save_tasks", { projectId, tasks: next }).catch(console.error);
+      return { tasks: { ...state.tasks, [projectId]: next } };
+    }),
+  reorderTasks: (projectId, cards) =>
+    set((state) => {
+      invoke("save_tasks", { projectId, tasks: cards }).catch(console.error);
+      return { tasks: { ...state.tasks, [projectId]: cards } };
+    }),
+
   settings: loadSettings(),
   updateSettings: (patch) =>
     set((state) => {
@@ -248,3 +295,12 @@ export const useStore = create<AppState>((set) => ({
   removeError: (id) =>
     set((state) => ({ errors: state.errors.filter((e) => e.id !== id) })),
 }));
+
+// Selectors helper for component use
+export const getPromptsForProject = (state: AppState, projectId: string) => {
+  return state.prompts[projectId] || (STABLE_EMPTY_ARRAY as PromptCard[]);
+};
+
+export const getTasksForProject = (state: AppState, projectId: string) => {
+  return state.tasks[projectId] || (STABLE_EMPTY_ARRAY as TaskCard[]);
+};

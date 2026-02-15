@@ -3,6 +3,7 @@ mod projects;
 mod prompts;
 mod servers;
 mod ssh;
+mod tasks;
 
 use tauri::Manager;
 
@@ -43,6 +44,8 @@ pub fn run() {
             ssh::list_ssh_keys,
             ssh::ssh_mkdir,
             ssh::ssh_list_dirs,
+            tasks::get_tasks,
+            tasks::save_tasks,
             toggle_devtools,
         ])
         .setup(|app| {
