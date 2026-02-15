@@ -196,37 +196,7 @@ function App() {
             </div>
           )}
 
-          {/* Task Panel — right drawer overlay */}
-          {showTaskPanel && (
-            <div
-              className="absolute right-0 top-0 bottom-0 w-80 z-30 border-l border-white/10 bg-zinc-900 shadow-2xl shadow-black/50"
-              style={{ animation: "slideInRight 0.2s ease-out" }}
-            >
-              {/* Drawer header with close button */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-zinc-900">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">📋</span>
-                  <span className="text-sm font-semibold text-zinc-200">Tasks</span>
-                </div>
-                <button
-                  onClick={() => setShowTaskPanel(false)}
-                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors cursor-pointer text-zinc-400 hover:text-zinc-200"
-                  title="Close"
-                >
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-              </div>
-              {activeSession ? (
-                <TaskPanel projectId={activeSession.projectId} />
-              ) : (
-                <div className="flex items-center justify-center h-64 text-center px-6">
-                  <p className="text-xs text-zinc-500">Select a project to view its tasks</p>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Task Panel — right drawer overlay (REMOVED) */}
         </div>
 
         {/* Status bar */}
@@ -240,21 +210,6 @@ function App() {
 
           <span className="ml-auto flex items-center gap-4">
             {/* Task panel toggle */}
-            <button
-              onClick={() => setShowTaskPanel(!showTaskPanel)}
-              className={`flex items-center gap-1 transition-colors cursor-pointer ${showTaskPanel ? "text-blue-400" : "hover:text-zinc-300"
-                }`}
-              title="Toggle Tasks Panel"
-            >
-              <span>📋</span>
-              <span>Tasks</span>
-              {activeSession && getTasksForProject({ tasks: projectTasks } as any, activeSession.projectId).length > 0 && (
-                <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1 rounded-full min-w-[14px] text-center border border-white/5">
-                  {getTasksForProject({ tasks: projectTasks } as any, activeSession.projectId).length}
-                </span>
-              )}
-            </button>
-            <span className="hover:text-zinc-300 transition-colors cursor-help" title="Version 0.1.0">v0.1.0</span>
             <button
               onClick={async () => {
                 const win = getCurrentWindow();
