@@ -1,6 +1,137 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
+import {
+    DndContext,
+    closestCorners,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragOverlay,
+    defaultDropAnimationSideEffects,
+} from "@dnd-kit/core";
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useStore, getTasksForProject } from "../../stores/store";
 import type { TaskCard, TaskStatus } from "../../types";
+
+interface SortableTaskCardProps {
+    card: TaskCard;
+    editingId: string | null;
+    editTitle: string;
+    editDescription: string;
+    onEditTitleChange: (v: string) => void;
+    onEditDescriptionChange: (v: string) => void;
+    onSave: () => void;
+    onCancel: () => void;
+    onRemove: () => void;
+    onStartEdit: () => void;
+}
+
+function TaskCardItem({
+    card,
+    editingId,
+    editTitle,
+    editDescription,
+    onEditTitleChange,
+    onEditDescriptionChange,
+    onSave,
+    onCancel,
+    onRemove,
+    onStartEdit,
+    isOverlay = false,
+    dragHandleProps = {},
+    style = {},
+    innerRef,
+}: SortableTaskCardProps & { isOverlay?: boolean; dragHandleProps?: any; style?: any; innerRef?: any }) {
+    const isEditing = editingId === card.id;
+
+    if (isEditing) {
+        return (
+            <div ref={innerRef} style={style} className="bg-zinc-800 border border-blue-500/50 rounded-xl p-3 shadow-2xl animate-in fade-in zoom-in duration-200 z-10">
+                <input
+                    autoFocus
+                    value={editTitle}
+                    onChange={(e) => onEditTitleChange(e.target.value)}
+                    className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-white mb-2 p-0"
+                    placeholder="Task title..."
+                />
+                <textarea
+                    value={editDescription}
+                    onChange={(e) => onEditDescriptionChange(e.target.value)}
+                    className="w-full bg-transparent border-none focus:ring-0 text-xs text-zinc-400 p-0 resize-none min-h-[60px]"
+                    placeholder="Description (optional)..."
+                />
+                <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-white/5">
+                    <button onClick={onCancel} className="px-2 py-1 text-[10px] font-bold text-zinc-500 hover:text-zinc-300">CANCEL</button>
+                    <button onClick={onSave} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded-md transition-colors">SAVE</button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            ref={innerRef}
+            style={style}
+            {...dragHandleProps}
+            onClick={onStartEdit}
+            className={`
+                group relative bg-zinc-900 border border-white/5 p-3 rounded-xl cursor-pointer
+                transition-all duration-300 hover:border-zinc-700 hover:bg-zinc-800/50 hover:shadow-lg
+                ${isOverlay ? "bg-zinc-800 border-white/20 z-50 scale-105 shadow-2xi rotate-2" : ""}
+            `}
+        >
+            <div className="flex items-start justify-between gap-2">
+                <h4 className="text-sm font-bold text-zinc-200 leading-tight group-hover:text-white transition-colors">{card.title}</h4>
+                <button
+                    onClick={(e) => { e.stopPropagation(); onRemove(); }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                >
+                    ✕
+                </button>
+            </div>
+            {card.description && (
+                <p className="text-[11px] text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">{card.description}</p>
+            )}
+            <div className="flex items-center justify-between mt-3">
+                <div className="text-[10px] text-zinc-600 font-medium">#{card.id.slice(-4)}</div>
+                <div className="text-[10px] text-zinc-700">{new Date(card.created_at).toLocaleDateString()}</div>
+            </div>
+        </div>
+    );
+}
+
+function SortableTaskCard(props: SortableTaskCardProps) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: props.card.id });
+
+    const style = {
+        transform: CSS.Translate.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1,
+    };
+
+    return (
+        <TaskCardItem
+            {...props}
+            innerRef={setNodeRef}
+            style={style}
+            dragHandleProps={{ ...attributes, ...listeners }}
+        />
+    );
+}
 
 interface TaskPanelProps {
     projectId: string;
@@ -109,47 +240,70 @@ export function TaskPanel({ projectId }: TaskPanelProps) {
 
     const handleDragOver = (e: React.DragEvent, cardId?: string, section?: TaskStatus) => {
         e.preventDefault();
-        if (cardId) setDragOverId(cardId);
+
         if (section) setDragOverSection(section);
+
+        if (cardId) {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            const position = e.clientY < midY ? "top" : "bottom";
+
+            if (dragOverId !== cardId || dragOverSection !== (section || null)) {
+                setDragOverId(cardId);
+                setDragOverSection(section || null);
+            }
+        } else {
+            setDragOverId(null);
+        }
+        e.dataTransfer.dropEffect = "move";
     };
 
     const handleDrop = (e: React.DragEvent, targetStatus: TaskStatus, targetCardId?: string) => {
         e.preventDefault();
-        setDragOverId(null);
-        setDragOverSection(null);
-
         const draggedId = dragItemRef.current;
         if (!draggedId) return;
 
         const draggedCard = tasks.find((t) => t.id === draggedId);
         if (!draggedCard) return;
 
-        // Update status if moved to different section
+        // Calculate position relative to target card if present
+        let position: 'top' | 'bottom' = 'bottom';
+        if (targetCardId) {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            position = e.clientY < midY ? 'top' : 'bottom';
+        }
+
+        // 1. Remove from current list
+        let others = tasks.filter((t) => t.id !== draggedId);
+
+        // 2. Prepare updated card
         const updatedCard = { ...draggedCard, status: targetStatus };
 
-        // Build new list: remove dragged, insert at position
-        const others = tasks.filter((t) => t.id !== draggedId);
-
-        if (targetCardId && targetCardId !== draggedId) {
+        // 3. Insert into target position
+        if (targetCardId) {
             const targetIdx = others.findIndex((t) => t.id === targetCardId);
             if (targetIdx >= 0) {
-                others.splice(targetIdx, 0, updatedCard);
+                const insertIdx = position === 'top' ? targetIdx : targetIdx + 1;
+                others.splice(insertIdx, 0, updatedCard);
             } else {
                 others.push(updatedCard);
             }
         } else {
-            // Dropped on section header — add at end of section
+            // Dropped on section header or empty space — add to end of section
             const sectionCards = others.filter((t) => t.status === targetStatus);
-            const lastInSection = sectionCards[sectionCards.length - 1];
-            if (lastInSection) {
-                const idx = others.findIndex((t) => t.id === lastInSection.id);
-                others.splice(idx + 1, 0, updatedCard);
+            if (sectionCards.length > 0) {
+                const lastIdx = others.lastIndexOf(sectionCards[sectionCards.length - 1]);
+                others.splice(lastIdx + 1, 0, updatedCard);
             } else {
                 others.push(updatedCard);
             }
         }
 
         reorderTasks(projectId, others);
+
+        setDragOverId(null);
+        setDragOverSection(null);
         dragItemRef.current = null;
         dragSourceSection.current = null;
     };
@@ -243,6 +397,10 @@ export function TaskPanel({ projectId }: TaskPanelProps) {
                                     const isDragOver = dragOverId === card.id;
                                     const isEditing = editingId === card.id;
 
+                                    // Calculate precise indicator
+                                    // For TaskPanel, we use a simpler approach as we don't store dropPosition in state yet, 
+                                    // but we can add it or just highlight the card. I'll add dropPosition to keep it consistent.
+
                                     return (
                                         <div
                                             key={card.id}
@@ -255,10 +413,14 @@ export function TaskPanel({ projectId }: TaskPanelProps) {
                                             }}
                                             onDragEnd={handleDragEnd}
                                             className={`group relative px-3 py-2.5 rounded-lg border transition-all cursor-grab active:cursor-grabbing ${isDragOver
-                                                ? "border-blue-500/30 bg-blue-500/5"
+                                                ? "border-blue-500 ring-1 ring-blue-500/20 bg-blue-500/5 shadow-lg shadow-blue-500/5 z-10"
                                                 : "border-white/5 bg-zinc-800/40 hover:bg-zinc-800/70 hover:border-white/10"
-                                                }`}
+                                                } ${dragItemRef.current === card.id ? "opacity-40" : ""}`}
                                         >
+                                            {/* Precise indicator (vertical line simulation via top/bottom border if dragging over) */}
+                                            {isDragOver && (
+                                                <div className="absolute inset-0 pointer-events-none rounded-lg ring-2 ring-blue-500/50" />
+                                            )}
                                             {isEditing ? (
                                                 <div className="space-y-2">
                                                     <input

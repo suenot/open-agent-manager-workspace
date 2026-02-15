@@ -1,6 +1,139 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { restrictToHorizontalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { useStore } from "../../stores/store";
 
+interface SortableTabItemProps {
+  session: any;
+  isActive: boolean;
+  idx: number;
+  projectSessionsCount: number;
+  cliLabel: string;
+  onSelect: () => void;
+  onClose: (e: React.MouseEvent) => void;
+  onTogglePrompt: (e: React.MouseEvent) => void;
+  showPromptQueue: boolean;
+}
+
+function TabItem({
+  session,
+  isActive,
+  idx,
+  projectSessionsCount,
+  cliLabel,
+  onSelect,
+  onClose,
+  onTogglePrompt,
+  showPromptQueue,
+  isOverlay = false,
+  dragHandleProps = {},
+  style = {},
+  innerRef,
+}: SortableTabItemProps & { isOverlay?: boolean; dragHandleProps?: any; style?: any; innerRef?: any }) {
+  return (
+    <div
+      ref={innerRef}
+      style={style}
+      {...dragHandleProps}
+      onClick={onSelect}
+      className={`
+        group relative flex items-center gap-2 px-3 py-1.5 rounded-t-lg cursor-pointer
+        transition-all duration-200 border-t border-x border-transparent mb-[-1px]
+        ${isActive
+          ? "bg-zinc-900 border-white/10 text-white shadow-sm"
+          : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+        }
+        ${isOverlay ? "bg-zinc-800 border-white/20 z-50 scale-105 shadow-xl" : ""}
+      `}
+    >
+      {/* Active Highlight Line */}
+      {isActive && (
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 rounded-full shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
+      )}
+
+      <span className="font-mono text-xs truncate max-w-[100px]">
+        {cliLabel}{projectSessionsCount > 1 ? ` #${idx + 1}` : ""}
+      </span>
+
+      {/* Status Indicator */}
+      <div className={`
+        w-1.5 h-1.5 rounded-full transition-all duration-300
+        ${session.status === "running"
+          ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"
+          : "bg-zinc-600"
+        }
+      `} />
+
+      {/* Close Button */}
+      <button
+        onClick={onClose}
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded-md hover:bg-white/10 transition-all text-zinc-500 hover:text-white"
+      >
+        ✕
+      </button>
+
+      {/* Prompt Queue Toggle (only for active) */}
+      {isActive && (
+        <button
+          onClick={onTogglePrompt}
+          className={`
+            ml-1 p-0.5 rounded-md transition-all
+            ${showPromptQueue
+              ? "text-blue-400 bg-blue-500/10"
+              : "text-zinc-500 hover:text-white hover:bg-white/10"
+            }
+          `}
+          title="Toggle Prompt Queue"
+        >
+          📋
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SortableTabItem(props: SortableTabItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.session.id });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <TabItem
+      {...props}
+      innerRef={setNodeRef}
+      style={style}
+      dragHandleProps={{ ...attributes, ...listeners }}
+    />
+  );
+}
 const CLI_PRESETS = [
   { value: "claude", label: "Claude Code", icon: "🤖" },
   { value: "gemini", label: "Gemini CLI", icon: "✨" },
@@ -26,9 +159,18 @@ export function TerminalTabs() {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Drag and Drop
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Derive active project from active session
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -90,37 +232,25 @@ export function TerminalTabs() {
     }
   };
 
-  // Drag Handlers
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData("text/plain", index.toString());
-    e.dataTransfer.effectAllowed = "move";
+  const handleDragStart = (event: any) => {
+    setActiveId(event.active.id);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
 
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    const dragIndexStr = e.dataTransfer.getData("text/plain");
-    const dragIndex = parseInt(dragIndexStr, 10);
+    if (over && active.id !== over.id) {
+      const oldIndex = projectSessions.findIndex(s => s.id === active.id);
+      const newIndex = projectSessions.findIndex(s => s.id === over.id);
 
-    if (!isNaN(dragIndex) && dragIndex !== dropIndex && activeProjectId) {
-      // Create a copy of project sessions and reorder
-      const newProjectSessions = [...projectSessions];
-      const [moved] = newProjectSessions.splice(dragIndex, 1);
-      newProjectSessions.splice(dropIndex, 0, moved);
-
-      // Reconstruct global list
-      // We need to carefully preserve sessions from other projects
-      // The simplest way is to filter out current project sessions and append the new order
-      // This changes global order but keeps per-project order correct which is what matters visually
-      const otherSessions = sessions.filter(s => s.projectId !== activeProjectId);
-      const newSessions = [...otherSessions, ...newProjectSessions];
-
-      setSessions(newSessions);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newProjectSessions = arrayMove(projectSessions, oldIndex, newIndex);
+        const otherSessions = sessions.filter(s => s.projectId !== activeProjectId);
+        setSessions([...otherSessions, ...newProjectSessions]);
+      }
     }
+
+    setActiveId(null);
   };
 
   // Even if no active project, we render a placeholder header or nothing
@@ -137,69 +267,54 @@ export function TerminalTabs() {
 
       <div className="h-5 w-px bg-white/10 mx-1" />
 
-      {/* Tabs scroll area */}
       <div className="flex-1 flex items-center gap-1.5 overflow-x-auto px-1 scrollbar-hide">
-        {projectSessions.map((session, idx) => {
-          const isActive = activeSessionId === session.id;
-          const cliLabel = session.cli || "claude";
-          const preset = CLI_PRESETS.find(p => p.value === session.cli) || { icon: "🤖" };
-
-          return (
-            <div
-              key={session.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, idx)}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, idx)}
-              onClick={() => setActiveSessionId(session.id)}
-              className={`
-                group relative flex items-center gap-2 px-3 py-1.5 rounded-t-lg cursor-pointer
-                transition-all duration-200 border-t border-x border-transparent mb-[-1px]
-                ${isActive
-                  ? "bg-zinc-900 border-white/10 text-white shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
-                }
-              `}
-            >
-              {/* Active Highlight Line */}
-              {isActive && (
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 rounded-full shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
-              )}
-
-              <span className="font-mono text-xs truncate max-w-[100px]">
-                {cliLabel}{projectSessions.length > 1 ? ` #${idx + 1}` : ""}
-              </span>
-
-              {/* Status Indicator */}
-              <div className={`
-                w-1.5 h-1.5 rounded-full transition-all duration-300
-                ${session.status === "running"
-                  ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]"
-                  : "bg-zinc-600"
-                }
-              `} />
-
-              {/* Close Button */}
-              <button
-                onClick={(e) => {
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToHorizontalAxis, restrictToWindowEdges]}
+        >
+          <SortableContext items={projectSessions.map(s => s.id)} strategy={horizontalListSortingStrategy}>
+            {projectSessions.map((session, idx) => (
+              <SortableTabItem
+                key={session.id}
+                session={session}
+                isActive={activeSessionId === session.id}
+                idx={idx}
+                projectSessionsCount={projectSessions.length}
+                cliLabel={session.cli || "claude"}
+                onSelect={() => setActiveSessionId(session.id)}
+                onClose={(e) => {
                   e.stopPropagation();
                   removeSession(session.id);
                 }}
-                className={`
-                  ml-1 opacity-0 group-hover:opacity-100 p-0.5 rounded-md
-                  hover:bg-red-500/20 hover:text-red-400 transition-all
-                  ${isActive ? "opacity-100 text-zinc-500" : "text-zinc-600"}
-                `}
-                title="Close session"
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-          );
-        })}
+                onTogglePrompt={(e) => {
+                  e.stopPropagation();
+                  setShowPromptQueue(!showPromptQueue);
+                }}
+                showPromptQueue={showPromptQueue}
+              />
+            ))}
+          </SortableContext>
+
+          <DragOverlay dropAnimation={null}>
+            {activeId ? (
+              <TabItem
+                session={projectSessions.find(s => s.id === activeId)}
+                isActive={activeSessionId === activeId}
+                idx={projectSessions.findIndex(s => s.id === activeId)}
+                projectSessionsCount={projectSessions.length}
+                cliLabel={projectSessions.find(s => s.id === activeId)?.cli || "claude"}
+                onSelect={() => { }}
+                onClose={() => { }}
+                onTogglePrompt={() => { }}
+                showPromptQueue={showPromptQueue}
+                isOverlay
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       {/* Add session button */}

@@ -1,6 +1,137 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { restrictToVerticalAxis, restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { useStore, getPromptsForProject } from "../../stores/store";
 import type { PromptCard } from "../../types";
+
+interface SortablePromptCardProps {
+  card: PromptCard;
+  projectId: string;
+  onRemove: () => void;
+  onUpdate: (card: PromptCard) => void;
+  onImagePaste: (e: React.ClipboardEvent, card: PromptCard) => void;
+  onRemoveImage: (card: PromptCard, imgIdx: number) => void;
+}
+
+function PromptCardItem({
+  card,
+  projectId,
+  onRemove,
+  onUpdate,
+  onImagePaste,
+  onRemoveImage,
+  isOverlay = false,
+  dragHandleProps = {},
+  style = {},
+  innerRef,
+}: SortablePromptCardProps & { isOverlay?: boolean; dragHandleProps?: any; style?: any; innerRef?: any }) {
+  return (
+    <div
+      ref={innerRef}
+      style={style}
+      className={`
+        relative p-4 bg-zinc-900/50 border border-white/5 rounded-xl group transition-all duration-300
+        ${isOverlay ? "bg-zinc-800 border-white/20 z-50 scale-105 shadow-2xl" : "hover:border-zinc-700"}
+      `}
+    >
+      <div className="flex items-start gap-3">
+        {/* Drag Handle */}
+        <div
+          {...dragHandleProps}
+          className="mt-2 text-zinc-600 hover:text-zinc-300 cursor-grab active:cursor-grabbing transition-colors"
+          title="Drag to reorder"
+        >
+          ⋮⋮
+        </div>
+
+        <div className="flex-1 space-y-3">
+          <textarea
+            value={card.text}
+            onChange={(e) => onUpdate({ ...card, text: e.target.value })}
+            onPaste={(e) => onImagePaste(e, card)}
+            placeholder="Type your prompt instruction or paste images..."
+            className="w-full bg-transparent border-none focus:ring-0 text-sm text-zinc-300 placeholder:text-zinc-600 resize-none min-h-[40px] custom-scrollbar"
+            rows={1}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement;
+              target.style.height = "auto";
+              target.style.height = `${target.scrollHeight}px`;
+            }}
+          />
+
+          {card.images.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+              {card.images.map((img, i) => (
+                <div key={i} className="relative group/img">
+                  <img
+                    src={img}
+                    alt=""
+                    className="w-16 h-16 rounded-lg object-cover border border-white/10"
+                  />
+                  <button
+                    onClick={() => onRemoveImage(card, i)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[10px] opacity-0 group-hover/img:opacity-100 transition-all shadow-lg border border-white/20"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={onRemove}
+          className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
+        >
+          🗑️
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SortablePromptCard(props: SortablePromptCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: props.card.id });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <PromptCardItem
+      {...props}
+      innerRef={setNodeRef}
+      style={style}
+      dragHandleProps={{ ...attributes, ...listeners }}
+    />
+  );
+}
 
 interface PromptQueueProps {
   projectId: string;
@@ -15,8 +146,18 @@ export function PromptQueue({ projectId }: PromptQueueProps) {
   const reorderPrompts = useStore((s) => s.reorderPrompts);
   const setShowPromptQueue = useStore((s) => s.setShowPromptQueue);
 
-  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
-  const dragSrcIdx = useRef<number | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     loadPrompts(projectId);
@@ -64,164 +205,101 @@ export function PromptQueue({ projectId }: PromptQueueProps) {
     });
   };
 
-  // Internal DnD reorder
-  const handleDragStart = (idx: number) => {
-    dragSrcIdx.current = idx;
+  const handleDragStart = (event: any) => {
+    setActiveId(event.active.id);
   };
 
-  const handleDragOver = (e: React.DragEvent, idx: number) => {
-    e.preventDefault();
-    setDragOverIdx(idx);
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = prompts.findIndex(p => p.id === active.id);
+      const newIndex = prompts.findIndex(p => p.id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reordered = arrayMove(prompts, oldIndex, newIndex);
+        reorderPrompts(projectId, reordered);
+      }
+    }
+
+    setActiveId(null);
   };
 
-  const handleDrop = (e: React.DragEvent, targetIdx: number) => {
-    e.preventDefault();
-    setDragOverIdx(null);
-
-    const srcIdx = dragSrcIdx.current;
-    if (srcIdx === null || srcIdx === targetIdx) return;
-
-    const reordered = [...prompts];
-    const [moved] = reordered.splice(srcIdx, 1);
-    reordered.splice(targetIdx, 0, moved);
-    reorderPrompts(projectId, reordered);
-    dragSrcIdx.current = null;
-  };
-
-  const handleDragEnd = () => {
-    setDragOverIdx(null);
-    dragSrcIdx.current = null;
-  };
+  const activePromptForOverlay = activeId ? (prompts.find(p => p.id === activeId) || null) : null;
 
   return (
-    <div className="w-80 h-full border-l border-white/5 bg-zinc-900/50 backdrop-blur-md flex flex-col select-none">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-zinc-950/30">
-        <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-          <span>📋</span> Queue
-        </h2>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleAdd}
-            className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 rounded-md transition-all active:scale-95"
-            title="Add new prompt card"
-          >
-            <span className="text-lg leading-none">+</span>
-          </button>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
+    >
+      <div className="h-full flex flex-col bg-zinc-950/50 backdrop-blur-xl border-l border-white/5 animate-in slide-in-from-right duration-300 shadow-2xl w-80">
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-white/5 bg-zinc-950/80">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-bold tracking-widest text-zinc-100 uppercase">Prompt Queue</h2>
+            <div className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] font-bold text-blue-400">
+              {prompts.length}
+            </div>
+          </div>
           <button
             onClick={() => setShowPromptQueue(false)}
-            className="w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-all"
-            title="Close panel"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-zinc-500 hover:text-white transition-all"
           >
             ✕
           </button>
         </div>
-      </div>
 
-      {/* Cards list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
-        {prompts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-center px-4 animate-fade-in">
-            <div className="w-12 h-12 rounded-full bg-zinc-800/50 flex items-center justify-center mb-3">
-              <span className="text-2xl text-zinc-600">📝</span>
-            </div>
-            <p className="text-sm text-zinc-400 font-medium mb-1">Queue Empty</p>
-            <p className="text-xs text-zinc-600 mb-4">
-              Add prompts to queue them up for later use.
-            </p>
-            <button
-              onClick={handleAdd}
-              className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 hover:text-blue-300 text-xs font-medium rounded-md border border-blue-500/20 transition-all"
-            >
-              Create Prompt
-            </button>
-          </div>
-        ) : (
-          prompts.map((card, idx) => (
-            <div
-              key={card.id}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData(
-                  "application/ccam-prompt",
-                  JSON.stringify({ cardId: card.id, projectId }),
-                );
-                e.dataTransfer.effectAllowed = "move";
-                handleDragStart(idx);
-              }}
-              onDragOver={(e) => handleDragOver(e, idx)}
-              onDrop={(e) => handleDrop(e, idx)}
-              onDragEnd={handleDragEnd}
-              className={`
-                group relative bg-zinc-800/40 backdrop-blur-sm rounded-lg border transition-all cursor-grab active:cursor-grabbing hover:bg-zinc-800/60 animate-fade-in
-                ${dragOverIdx === idx
-                  ? "border-blue-500 ring-1 ring-blue-500/30 shadow-lg shadow-blue-500/10 z-10 scale-105"
-                  : "border-white/5 hover:border-white/10 shadow-sm"
-                }
-              `}
-            >
-              {/* Drag Handle */}
-              <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg bg-transparent group-hover:bg-zinc-700/50 transition-colors" />
-
-              {/* Card content */}
-              <div className="p-3">
-                <textarea
-                  value={card.text}
-                  onChange={(e) =>
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    updatePrompt(projectId, { ...card, text: e.target.value } as any)
-                  }
-                  onPaste={(e) => handleImagePaste(e, card)}
-                  placeholder="Type prompt here..."
-                  rows={3}
-                  className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none font-sans"
-                  onMouseDown={(e) => e.stopPropagation()}
+        <div className="flex-1 overflow-y-auto no-scrollbar p-3">
+          <SortableContext items={prompts.map(p => p.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-3">
+              {prompts.map((card) => (
+                <SortablePromptCard
+                  key={card.id}
+                  card={card}
+                  projectId={projectId}
+                  onRemove={() => removePrompt(projectId, card.id)}
+                  onUpdate={(updated) => updatePrompt(projectId, updated)}
+                  onImagePaste={handleImagePaste}
+                  onRemoveImage={handleRemoveImage}
                 />
-
-                {/* Image thumbnails */}
-                {card.images.length > 0 && (
-                  <div className="flex gap-2 flex-wrap mt-3 pt-3 border-t border-white/5">
-                    {card.images.map((img, imgIdx) => (
-                      <div key={imgIdx} className="relative group/img">
-                        <img
-                          src={img}
-                          alt=""
-                          className="w-12 h-12 object-cover rounded-md border border-white/10"
-                        />
-                        <button
-                          onClick={() => handleRemoveImage(card, imgIdx)}
-                          className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all shadow-sm hover:scale-110"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Card footer */}
-              <div className="flex items-center justify-between px-3 py-2 border-t border-white/5 bg-zinc-900/30 rounded-b-lg">
-                <div className="flex items-center gap-2">
-                  {card.images.length > 0 && (
-                    <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded flex items-center gap-1">
-                      <span>🖼️</span> {card.images.length}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => removePrompt(projectId, card.id)}
-                  className="text-zinc-600 hover:text-red-400 text-xs transition-colors opacity-0 group-hover:opacity-100 p-1"
-                  title="Delete prompt"
-                >
-                  <span className="sr-only">Delete</span>
-                  🗑️
-                </button>
-              </div>
+              ))}
             </div>
-          ))
-        )}
+          </SortableContext>
+
+          {prompts.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 px-10 text-center opacity-40">
+              <span className="text-4xl mb-4">📋</span>
+              <p className="text-sm font-medium text-zinc-400">Queue is empty</p>
+              <p className="text-xs text-zinc-600 mt-1">Start by adding a new prompt card below.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-shrink-0 p-4 border-t border-white/5 bg-zinc-950/80">
+          <button
+            onClick={handleAdd}
+            className="w-full h-11 flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-xs font-bold rounded-xl border border-white/5 transition-all shadow-sm active:scale-[0.98]"
+          >
+            <span>+</span> NEW PROMPT CARD
+          </button>
+        </div>
+
+        <DragOverlay dropAnimation={null}>
+          {activePromptForOverlay ? (
+            <PromptCardItem
+              card={activePromptForOverlay}
+              projectId={projectId}
+              onRemove={() => { }}
+              onUpdate={() => { }}
+              onImagePaste={() => { }}
+              onRemoveImage={() => { }}
+              isOverlay
+            />
+          ) : null}
+        </DragOverlay>
       </div>
-    </div>
+    </DndContext>
   );
 }
