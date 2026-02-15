@@ -33,6 +33,9 @@ pub fn run() {
             cmdop::list_cmdop_sessions,
             cmdop::cmdop_agent_run,
             cmdop::cmdop_send_input,
+            cmdop::cmdop_start_stream,
+            cmdop::cmdop_stop_stream,
+            cmdop::cmdop_resize_terminal,
             servers::get_servers,
             servers::add_server,
             servers::update_server,
@@ -43,12 +46,15 @@ pub fn run() {
             toggle_devtools,
         ])
         .setup(|app| {
+            app.manage(cmdop::CmdopState::default());
+            
             // Auto-open DevTools during development
             if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();
             }
             Ok(())
         })
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

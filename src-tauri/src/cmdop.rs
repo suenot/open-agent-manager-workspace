@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
-use tauri::Manager;
+use std::collections::HashMap;
+use std::io::Write;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Manager, Emitter};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalSession {
@@ -15,84 +18,91 @@ pub struct TerminalSession {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct NodeSessionsOutput {
-    sessions: Vec<NodeSession>,
+struct PythonSessionsOutput {
+    sessions: Vec<PythonSession>,
     total: u32,
     workspace_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NodeSession {
+struct PythonSession {
     session_id: String,
+    machine_hostname: String,
     machine_name: String,
-    hostname: String,
     status: String,
     os: String,
     agent_version: String,
     shell: String,
-    connected_at: String,
+    connected_at: Option<String>,
 }
 
-/// List terminal sessions via @cmdop/node gRPC SDK.
-/// Requires Node.js to be installed and @cmdop/node in node_modules.
+#[derive(Default)]
+pub struct CmdopState {
+    pub bridges: Arc<Mutex<HashMap<String, Child>>>,
+}
+
 #[tauri::command]
 pub async fn list_cmdop_sessions(
     api_key: String,
-    app: tauri::AppHandle,
+    _app: AppHandle,
 ) -> Result<Vec<TerminalSession>, String> {
-    // Find node_modules path — try project root first, then app resource dir
-    let node_modules = find_node_modules(&app)?;
+    let python_bin = find_python_binary()?;
 
     let script = format!(
         r#"
-const {{ CMDOPClient }} = require("{node_modules}/@cmdop/node");
-(async () => {{
-    try {{
-        const client = await CMDOPClient.remote("{api_key}");
-        const {{ sessions, total, workspaceName }} = await client.terminal.list();
-        const result = {{
-            sessions: sessions.map(s => ({{
-                sessionId: s.sessionId,
-                machineName: s.machineName,
-                hostname: s.hostname,
-                status: s.status,
-                os: s.os,
-                agentVersion: s.agentVersion || "",
-                shell: s.shell || "",
-                connectedAt: s.connectedAt ? s.connectedAt.toISOString() : "",
-            }})),
-            total,
-            workspace_name: workspaceName,
-        }};
-        console.log(JSON.stringify(result));
-        await client.close();
-    }} catch (err) {{
-        console.error(JSON.stringify({{ error: err.message }}));
-        process.exit(1);
-    }}
-}})();
+import asyncio
+import json
+import os
+from cmdop import AsyncCMDOPClient
+
+async def list_sessions():
+    try:
+        async with AsyncCMDOPClient.remote(api_key="{api_key}") as client:
+            response = await client.terminal.list_sessions()
+            result = {{
+                "sessions": [{{
+                    "session_id": s.session_id,
+                    "machine_hostname": s.machine_hostname,
+                    "machine_name": s.machine_name,
+                    "status": s.status,
+                    "os": s.os,
+                    "agent_version": s.agent_version,
+                    "shell": s.shell,
+                    "connected_at": s.connected_at.isoformat() if s.connected_at else None
+                }} for s in response.sessions],
+                "total": response.total,
+                "workspace_name": response.workspace_name
+            }}
+            print(json.dumps(result))
+    except Exception as e:
+        print(json.dumps({{"error": str(e)}}))
+
+if __name__ == "__main__":
+    asyncio.run(list_sessions())
 "#,
-        node_modules = node_modules.replace('\\', "\\\\").replace('"', "\\\""),
-        api_key = api_key.replace('"', "\\\""),
+        api_key = api_key.replace('"', "\\\"")
     );
 
-    let node_bin = find_node_binary()?;
-
-    let output = Command::new(&node_bin)
-        .arg("-e")
+    let output = Command::new(&python_bin)
+        .arg("-c")
         .arg(&script)
         .output()
-        .map_err(|e| format!("Failed to run node ({}): {}. Is Node.js installed?", node_bin, e))?;
+        .map_err(|e| format!("Failed to run python: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Node script failed: {}", stderr.chars().take(500).collect::<String>()));
+        return Err(format!("Python script failed: {}", stderr));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: NodeSessionsOutput = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse node output: {} — raw: {}", e, stdout.chars().take(200).collect::<String>()))?;
+    if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+        if let Some(err) = error_json.get("error") {
+            return Err(err.as_str().unwrap_or("Unknown python error").to_string());
+        }
+    }
+
+    let parsed: PythonSessionsOutput = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse python output: {} — raw: {}", e, stdout))?;
 
     Ok(parsed
         .sessions
@@ -100,12 +110,12 @@ const {{ CMDOPClient }} = require("{node_modules}/@cmdop/node");
         .map(|s| TerminalSession {
             session_id: s.session_id,
             machine_name: s.machine_name,
-            hostname: s.hostname,
+            hostname: s.machine_hostname,
             status: s.status,
             os: s.os,
             agent_version: s.agent_version,
             shell: s.shell,
-            connected_at: s.connected_at,
+            connected_at: s.connected_at.unwrap_or_default(),
         })
         .collect())
 }
@@ -116,111 +126,177 @@ pub struct AgentRunResult {
     pub success: bool,
 }
 
-/// Execute a command on a remote machine via agent.run() gRPC.
-/// Returns the command output text.
 #[tauri::command]
 pub async fn cmdop_agent_run(
     api_key: String,
     session_id: String,
     command: String,
-    app: tauri::AppHandle,
+    _app: AppHandle,
 ) -> Result<AgentRunResult, String> {
-    let node_modules = find_node_modules(&app)?;
+    let python_bin = find_python_binary()?;
 
     let script = format!(
         r#"
-const {{ CMDOPClient }} = require("{node_modules}/@cmdop/node");
-(async () => {{
-    try {{
-        const client = await CMDOPClient.remote("{api_key}");
-        const result = await client.agent.run("{session_id}", {command_json});
-        console.log(JSON.stringify({{ text: result.text || "", success: !!result.success }}));
-        process.exit(0);
-    }} catch (err) {{
-        console.error(JSON.stringify({{ error: err.message }}));
-        process.exit(1);
-    }}
-}})();
+import asyncio
+import json
+from cmdop import AsyncCMDOPClient
+
+async def run():
+    try:
+        async with AsyncCMDOPClient.remote(api_key="{api_key}") as client:
+            output, code = await client.terminal.execute({command_json}, session_id="{session_id}")
+            print(json.dumps({{"text": output.decode('utf-8', errors='replace'), "success": code == 0}}))
+    except Exception as e:
+        print(json.dumps({{"error": str(e)}}))
+
+if __name__ == "__main__":
+    asyncio.run(run())
 "#,
-        node_modules = node_modules.replace('\\', "\\\\").replace('"', "\\\""),
         api_key = api_key.replace('"', "\\\""),
         session_id = session_id.replace('"', "\\\""),
-        command_json = serde_json::to_string(&command).unwrap_or_else(|_| format!("\"{}\"", command)),
+        command_json = serde_json::to_string(&command).unwrap()
     );
 
-    let node_bin = find_node_binary()?;
-
-    let output = Command::new(&node_bin)
-        .arg("-e")
+    let output = Command::new(&python_bin)
+        .arg("-c")
         .arg(&script)
         .output()
-        .map_err(|e| format!("Failed to run node: {}", e))?;
+        .map_err(|e| format!("Failed to run python: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("agent.run failed: {}", stderr.chars().take(500).collect::<String>()));
+        return Err(format!("agent.run failed: {}", stderr));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: AgentRunResult = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse agent.run output: {} — raw: {}", e, stdout.chars().take(200).collect::<String>()))?;
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).map_err(|e| e.to_string())?;
+    
+    if let Some(err) = parsed.get("error") {
+        return Err(err.as_str().unwrap_or("Unknown error").to_string());
+    }
 
-    Ok(parsed)
+    Ok(AgentRunResult {
+        text: parsed["text"].as_str().unwrap_or("").to_string(),
+        success: parsed["success"].as_bool().unwrap_or(false),
+    })
 }
 
-/// Send raw input to a terminal session via gRPC.
 #[tauri::command]
-pub async fn cmdop_send_input(
+pub async fn cmdop_start_stream(
     api_key: String,
     session_id: String,
-    data: String,
-    app: tauri::AppHandle,
+    app: AppHandle,
+    state: tauri::State<'_, CmdopState>,
 ) -> Result<(), String> {
-    let node_modules = find_node_modules(&app)?;
+    let python_bin = find_python_binary()?;
+    let bridge_script = find_bridge_script(&app)?;
 
-    let script = format!(
-        r#"
-const {{ CMDOPClient }} = require("{node_modules}/@cmdop/node");
-(async () => {{
-    try {{
-        const client = await CMDOPClient.remote("{api_key}");
-        await client.terminal.sendInput("{session_id}", {data_json});
-        console.log("ok");
-        process.exit(0);
-    }} catch (err) {{
-        console.error(err.message);
-        process.exit(1);
-    }}
-}})();
-"#,
-        node_modules = node_modules.replace('\\', "\\\\").replace('"', "\\\""),
-        api_key = api_key.replace('"', "\\\""),
-        session_id = session_id.replace('"', "\\\""),
-        data_json = serde_json::to_string(&data).unwrap_or_else(|_| format!("\"{}\"", data)),
-    );
+    let mut child = Command::new(&python_bin)
+        .arg(bridge_script)
+        .arg(&api_key)
+        .arg(&session_id)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn bridge: {}", e))?;
 
-    let node_bin = find_node_binary()?;
-
-    let output = Command::new(&node_bin)
-        .arg("-e")
-        .arg(&script)
-        .output()
-        .map_err(|e| format!("Failed to run node: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("sendInput failed: {}", stderr.chars().take(500).collect::<String>()));
+    let stdout = child.stdout.take().ok_or("Failed to open stdout")?;
+    let session_id_clone = session_id.clone();
+    
+    // Manage process in state
+    {
+        let mut bridges = state.bridges.lock().unwrap();
+        bridges.insert(session_id.clone(), child);
     }
+
+    // Spawn thread to read stdout and emit events
+    let app_handle = app.clone();
+    std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&l) {
+                    let event_name = format!("cmdop-event-{}", session_id_clone);
+                    let _ = app_handle.emit(&event_name, json);
+                }
+            } else {
+                break;
+            }
+        }
+        // If thread ends, cleanup bridge (but process might still be running or dying)
+        println!("[CMDOP] Bridge thread for {} ended", session_id_clone);
+    });
 
     Ok(())
 }
 
-fn find_node_binary() -> Result<String, String> {
-    // Common node locations on macOS
+#[tauri::command]
+pub async fn cmdop_stop_stream(
+    session_id: String,
+    state: tauri::State<'_, CmdopState>,
+) -> Result<(), String> {
+    let mut bridges = state.bridges.lock().unwrap();
+    if let Some(mut child) = bridges.remove(&session_id) {
+        let _ = child.kill();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cmdop_send_input(
+    session_id: String,
+    data: String,
+    is_base64: bool,
+    state: tauri::State<'_, CmdopState>,
+) -> Result<(), String> {
+    let mut bridges = state.bridges.lock().unwrap();
+    if let Some(child) = bridges.get_mut(&session_id) {
+        if let Some(mut stdin) = child.stdin.as_ref() {
+            let b64_data = if is_base64 { data } else {
+                use base64::{Engine as _, engine::general_purpose};
+                general_purpose::STANDARD.encode(data.as_bytes())
+            };
+            let msg = serde_json::json!({
+                "type": "input",
+                "data": b64_data
+            });
+            let _ = writeln!(stdin, "{}", msg.to_string());
+            return Ok(());
+        }
+    }
+    Err("Bridge not found or stdin not available".to_string())
+}
+
+#[tauri::command]
+pub async fn cmdop_resize_terminal(
+    session_id: String,
+    cols: u16,
+    rows: u16,
+    state: tauri::State<'_, CmdopState>,
+) -> Result<(), String> {
+    let mut bridges = state.bridges.lock().unwrap();
+    if let Some(child) = bridges.get_mut(&session_id) {
+        if let Some(mut stdin) = child.stdin.as_ref() {
+            let msg = serde_json::json!({
+                "type": "resize",
+                "cols": cols,
+                "rows": rows
+            });
+            let _ = writeln!(stdin, "{}", msg.to_string());
+            return Ok(());
+        }
+    }
+    Err("Bridge not found".to_string())
+}
+
+fn find_python_binary() -> Result<String, String> {
     let candidates = [
-        "/opt/homebrew/bin/node",   // Homebrew (Apple Silicon)
-        "/usr/local/bin/node",      // Homebrew (Intel) / manual install
-        "/usr/bin/node",            // System
+        "/opt/homebrew/bin/python3",
+        "/usr/local/bin/python3",
+        "/usr/bin/python3",
+        "python3",
     ];
 
     for path in &candidates {
@@ -229,81 +305,31 @@ fn find_node_binary() -> Result<String, String> {
         }
     }
 
-    // Try PATH via `which node`
-    if let Ok(output) = Command::new("/usr/bin/which").arg("node").output() {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() && std::path::Path::new(&path).exists() {
-                return Ok(path);
-            }
-        }
-    }
-
-    // Try NVM default
-    if let Ok(home) = std::env::var("HOME") {
-        let nvm_node = format!("{}/.nvm/versions/node", home);
-        if let Ok(entries) = std::fs::read_dir(&nvm_node) {
-            // Pick the latest version
-            let mut versions: Vec<_> = entries.filter_map(|e| e.ok()).collect();
-            versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
-            if let Some(latest) = versions.first() {
-                let node = latest.path().join("bin/node");
-                if node.exists() {
-                    return Ok(node.to_string_lossy().to_string());
-                }
-            }
-        }
-    }
-
-    Err("Node.js not found. Install it: brew install node".to_string())
+    Ok("python3".to_string())
 }
 
-fn find_node_modules(app: &tauri::AppHandle) -> Result<String, String> {
-    // Try 1: Project root (dev mode — CWD is project root)
-    if let Ok(cwd) = std::env::current_dir() {
-        let nm = cwd.join("node_modules");
-        if nm.join("@cmdop/node").exists() {
-            return Ok(nm.to_string_lossy().to_string());
-        }
+fn find_bridge_script(app: &AppHandle) -> Result<String, String> {
+    // Try relative to CWD first (dev mode)
+    let dev_path = std::path::Path::new("src-tauri/src/cmdop_bridge.py");
+    if dev_path.exists() {
+        return Ok(dev_path.to_string_lossy().to_string());
     }
 
-    // Try 2: Relative to the binary (production — bundled app)
-    if let Ok(exe) = std::env::current_exe() {
-        // macOS: .app/Contents/MacOS/binary → .app/Contents/Resources/node_modules
-        if let Some(parent) = exe.parent() {
-            let nm = parent.join("../Resources/node_modules");
-            if nm.join("@cmdop/node").exists() {
-                return Ok(nm.canonicalize().unwrap_or(nm).to_string_lossy().to_string());
-            }
-        }
-    }
-
-    // Try 3: App resource dir (Tauri API)
+    // Try in resource dir
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let nm: std::path::PathBuf = resource_dir.join("node_modules");
-        if nm.join("@cmdop/node").exists() {
-            return Ok(nm.to_string_lossy().to_string());
+        let script = resource_dir.join("cmdop_bridge.py");
+        if script.exists() {
+            return Ok(script.to_string_lossy().to_string());
         }
     }
 
-    // Try 4: Build-time project directory (works after `npm run tauri build`)
-    {
-        let build_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        if let Some(project_root) = build_dir.parent() {
-            let nm = project_root.join("node_modules");
-            if nm.join("@cmdop/node").exists() {
-                return Ok(nm.to_string_lossy().to_string());
-            }
-        }
+    // Try manifest dir
+    let build_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let script = build_dir.join("src/cmdop_bridge.py");
+    if script.exists() {
+        return Ok(script.to_string_lossy().to_string());
     }
 
-    // Try 5: Home directory global node_modules
-    if let Ok(home) = std::env::var("HOME") {
-        let nm = std::path::PathBuf::from(&home).join("node_modules");
-        if nm.join("@cmdop/node").exists() {
-            return Ok(nm.to_string_lossy().to_string());
-        }
-    }
-
-    Err("@cmdop/node not found. Install it: npm install @cmdop/node".to_string())
+    Err("cmdop_bridge.py not found".to_string())
 }
+

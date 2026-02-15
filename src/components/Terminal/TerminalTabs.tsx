@@ -128,9 +128,8 @@ export function TerminalTabs() {
 
   return (
     <div className="flex items-center bg-zinc-950/80 backdrop-blur-md border-b border-white/5 px-2 select-none h-12 sticky top-0 z-20">
-      {/* Project info badge */}
-      <div className="mr-3 pl-2 pr-3 py-1 bg-white/5 rounded-md flex items-center gap-2 border border-white/5">
-        <span className="text-lg">{activeProject.icon}</span>
+      {/* Project name badge */}
+      <div className="mr-3 px-3 py-1 bg-white/5 rounded-md border border-white/5">
         <span className="font-medium text-sm text-zinc-300 truncate max-w-[120px]">
           {activeProject.name}
         </span>
@@ -166,9 +165,7 @@ export function TerminalTabs() {
               {isActive && (
                 <div className="absolute top-0 left-0 right-0 h-[2px] bg-blue-500 rounded-full shadow-[0_0_6px_rgba(59,130,246,0.8)]" />
               )}
-// ... rest remains same
 
-              <span className="text-xs opacity-80">{preset.icon}</span>
               <span className="font-mono text-xs truncate max-w-[100px]">
                 {cliLabel}{projectSessions.length > 1 ? ` #${idx + 1}` : ""}
               </span>

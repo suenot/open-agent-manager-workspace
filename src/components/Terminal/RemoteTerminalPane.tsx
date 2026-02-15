@@ -57,9 +57,10 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
+import { listen } from "@tauri-apps/api/event";
+
 /**
- * Inner terminal component — xterm.js + agent.run() for command execution.
- * Uses gRPC agent.run() to execute commands and get output (~3-5s per command).
+ * Inner terminal component — xterm.js + cmdop_bridge.py for real-time streaming.
  */
 function RemoteTerminalInner({
   sessionId,
@@ -83,123 +84,7 @@ function RemoteTerminalInner({
   const apiKeyRef = useRef(apiKey);
   apiKeyRef.current = apiKey;
 
-  // Line buffer for command input
-  const lineBufferRef = useRef("");
-  const isRunningRef = useRef(false);
-  const cwdRef = useRef(remote.remote_path || "~");
-  const historyRef = useRef<string[]>([]);
-  const historyIndexRef = useRef(-1);
-
-  // Execute a command via agent.run()
-  const executeCommand = useCallback(
-    async (command: string): Promise<AgentRunResult | null> => {
-      if (!terminalRef.current) return null;
-      isRunningRef.current = true;
-
-      try {
-        const result = await invoke<AgentRunResult>("cmdop_agent_run", {
-          apiKey: apiKeyRef.current,
-          sessionId: cmdopSessionId,
-          command,
-        });
-
-        if (terminalRef.current && result.text) {
-          const lines = result.text.split("\n");
-          for (const line of lines) {
-            terminalRef.current.writeln(line);
-          }
-        }
-        if (terminalRef.current && !result.success) {
-          terminalRef.current.writeln(
-            `\x1b[31m[command failed]\x1b[0m`,
-          );
-        }
-        return result;
-      } catch (err) {
-        if (terminalRef.current) {
-          terminalRef.current.writeln(
-            `\x1b[31mError: ${String(err)}\x1b[0m`,
-          );
-        }
-        addErrorRef.current(
-          "Remote Terminal",
-          `agent.run failed: ${String(err)}`,
-          `Machine: ${remote.machine}, Session: ${cmdopSessionId}`,
-        );
-        return null;
-      } finally {
-        isRunningRef.current = false;
-      }
-    },
-    [cmdopSessionId, remote.machine],
-  );
-
-  // Print prompt
-  const printPrompt = useCallback(() => {
-    if (!terminalRef.current) return;
-    const cwd = cwdRef.current;
-    const shortCwd = cwd.replace(/^\/home\/[^/]+/, "~");
-    terminalRef.current.write(
-      `\x1b[32m${remote.machine}\x1b[0m:\x1b[34m${shortCwd}\x1b[0m$ `,
-    );
-  }, [remote.machine]);
-
-  // Handle command submission
-  const handleCommand = useCallback(
-    async (command: string) => {
-      const trimmed = command.trim();
-      if (!trimmed) {
-        printPrompt();
-        return;
-      }
-
-      // Add to history
-      historyRef.current.push(trimmed);
-      historyIndexRef.current = -1;
-
-      // Handle special commands
-      if (trimmed === "exit" || trimmed === "logout") {
-        if (terminalRef.current) {
-          terminalRef.current.writeln(`\x1b[33m[Session ended]\x1b[0m`);
-        }
-        onExitRef.current?.();
-        return;
-      }
-
-      if (trimmed === "clear") {
-        terminalRef.current?.clear();
-        printPrompt();
-        return;
-      }
-
-      // Handle cd — track cwd
-      if (trimmed === "cd" || trimmed.startsWith("cd ")) {
-        const dir = trimmed === "cd" ? "~" : trimmed.slice(3).trim();
-        const result = await executeCommand(
-          `cd ${cwdRef.current} && cd ${dir} && pwd`,
-        );
-        if (result?.success && result.text.trim()) {
-          // Last non-empty line is pwd output
-          const lines = result.text.trim().split("\n");
-          cwdRef.current = lines[lines.length - 1] || cwdRef.current;
-        }
-        printPrompt();
-        return;
-      }
-
-      // Regular command — wrap with cd to maintain cwd context
-      await executeCommand(`cd ${cwdRef.current} && ${trimmed}`);
-      printPrompt();
-    },
-    [executeCommand, printPrompt],
-  );
-
-  const handleCommandRef = useRef(handleCommand);
-  handleCommandRef.current = handleCommand;
-  const printPromptRef = useRef(printPrompt);
-  printPromptRef.current = printPrompt;
-
-  // Initialize xterm.js
+  // Initialize xterm.js and stream
   useEffect(() => {
     if (!containerRef.current || initializedRef.current) return;
     initializedRef.current = true;
@@ -223,184 +108,155 @@ function RemoteTerminalInner({
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
 
-    requestAnimationFrame(() => {
-      try {
-        fitAddon.fit();
-      } catch {
-        // ignore
-      }
-    });
-
     terminal.writeln(
-      `\x1b[36mConnected to remote machine: ${remote.machine}\x1b[0m`,
+      `\x1b[36mConnecting to remote machine: ${remote.machine}\x1b[0m`,
     );
     terminal.writeln(`\x1b[90mSession: ${cmdopSessionId}\x1b[0m`);
-    terminal.writeln(
-      `\x1b[90mMode: command execution via gRPC (~3-5s per command)\x1b[0m`,
-    );
+    terminal.writeln(`\x1b[90mMode: Real-time Streaming (gRPC)\x1b[0m`);
     terminal.writeln("");
 
-    // Handle keyboard input — line-based editing
-    const inputDisposable = terminal.onData((data) => {
-      if (isRunningRef.current) return;
+    let unlisten: (() => void) | null = null;
 
-      for (let i = 0; i < data.length; i++) {
-        const char = data[i];
-
-        if (char === "\r" || char === "\n") {
-          terminal.writeln("");
-          const cmd = lineBufferRef.current;
-          lineBufferRef.current = "";
-          handleCommandRef.current(cmd);
-        } else if (char === "\x7f" || char === "\b") {
-          if (lineBufferRef.current.length > 0) {
-            lineBufferRef.current = lineBufferRef.current.slice(0, -1);
-            terminal.write("\b \b");
-          }
-        } else if (char === "\x03") {
-          lineBufferRef.current = "";
-          terminal.writeln("^C");
-          printPromptRef.current();
-        } else if (char === "\x15") {
-          const len = lineBufferRef.current.length;
-          lineBufferRef.current = "";
-          terminal.write("\b \b".repeat(len));
-        } else if (char === "\x1b" && data[i + 1] === "[") {
-          // Arrow keys: ESC [ A/B/C/D
-          const arrow = data[i + 2];
-          i += 2;
-          if (arrow === "A") {
-            // Up arrow
-            if (historyRef.current.length > 0) {
-              if (historyIndexRef.current === -1) {
-                historyIndexRef.current = historyRef.current.length - 1;
-              } else if (historyIndexRef.current > 0) {
-                historyIndexRef.current--;
-              }
-              const len = lineBufferRef.current.length;
-              terminal.write("\b \b".repeat(len));
-              const entry = historyRef.current[historyIndexRef.current];
-              lineBufferRef.current = entry;
-              terminal.write(entry);
-            }
-          } else if (arrow === "B") {
-            // Down arrow
-            const len = lineBufferRef.current.length;
-            terminal.write("\b \b".repeat(len));
-            if (
-              historyIndexRef.current >= 0 &&
-              historyIndexRef.current < historyRef.current.length - 1
-            ) {
-              historyIndexRef.current++;
-              const entry = historyRef.current[historyIndexRef.current];
-              lineBufferRef.current = entry;
-              terminal.write(entry);
-            } else {
-              historyIndexRef.current = -1;
-              lineBufferRef.current = "";
-            }
-          }
-          // Ignore left/right arrows for now
-        } else if (char >= " ") {
-          lineBufferRef.current += char;
-          terminal.write(char);
-        }
-      }
-    });
-
-    // Register for programmatic input (prompt queue)
-    ptyRegistry.register(sessionId, (data) => {
-      if (isRunningRef.current) return;
-      const lines = data.split("\n");
-      for (const line of lines) {
-        if (line.trim()) {
-          terminal.writeln(line);
-          handleCommandRef.current(line);
-        }
-      }
-    });
-
-    // Auto-start: resolve initial cwd, then optionally start CLI
-    const cliName = cli || "claude";
-    (async () => {
-      // Resolve initial cwd
+    const startStream = async () => {
       try {
-        const pwdResult = await invoke<AgentRunResult>("cmdop_agent_run", {
+        // Start bridge process
+        await invoke("cmdop_start_stream", {
           apiKey: apiKeyRef.current,
           sessionId: cmdopSessionId,
-          command: `cd ${remote.remote_path} 2>/dev/null && pwd || echo "${remote.remote_path}"`,
         });
-        if (pwdResult.success && pwdResult.text.trim()) {
-          const lines = pwdResult.text.trim().split("\n");
-          cwdRef.current = lines[lines.length - 1] || remote.remote_path;
-        }
-      } catch {
-        // keep default
-      }
 
-      if (cliName !== "none") {
-        // Start CLI via sendInput (sends to the actual remote PTY)
-        let cliCmd: string;
-        if (cliName === "claude") {
-          const flags: string[] = [];
-          if (settings.dangerouslySkipPermissions) {
-            flags.push("--dangerously-skip-permissions");
+        // Listen for output events
+        unlisten = await listen<{ type: string; data?: string; status?: string; message?: string }>(
+          `cmdop-event-${cmdopSessionId}`,
+          (event) => {
+            const msg = event.payload;
+            if (msg.type === "output" && msg.data) {
+              // Base64 to Uint8Array/String
+              const binary = atob(msg.data);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              terminal.write(bytes);
+            } else if (msg.type === "status") {
+              terminal.writeln(`\x1b[90m[Status: ${msg.status}]\x1b[0m`);
+            } else if (msg.type === "error") {
+              terminal.writeln(`\x1b[31m[Error: ${msg.message}]\x1b[0m`);
+            }
           }
-          if (settings.teammateMode !== "auto") {
-            flags.push(`--teammate-mode ${settings.teammateMode}`);
-          }
-          cliCmd = `claude ${flags.join(" ")}`.trim();
-        } else {
-          cliCmd = cliName;
-        }
-
-        terminal.writeln(`\x1b[33mStarting ${cliName} on remote machine...\x1b[0m`);
-        terminal.writeln(
-          `\x1b[90m(CLI runs on remote PTY — use agent.run commands to interact)\x1b[0m`,
         );
-        terminal.writeln("");
 
-        try {
+        // Initial resize
+        fitAddon.fit();
+        const { cols, rows } = terminal;
+        await invoke("cmdop_resize_terminal", {
+          sessionId: cmdopSessionId,
+          cols,
+          rows,
+        });
+
+        // Optional: Start CLI if requested
+        if (cli && cli !== "none") {
+          const cliName = cli === "claude" ? "claude" : cli;
+          const flags: string[] = [];
+          if (settings.dangerouslySkipPermissions) flags.push("--dangerously-skip-permissions");
+          if (settings.teammateMode !== "auto") flags.push(`--teammate-mode ${settings.teammateMode}`);
+
+          const startCmd = cli === "claude"
+            ? `cd ${remote.remote_path || "~"} && claude ${flags.join(" ")}\n`
+            : `cd ${remote.remote_path || "~"} && ${cli}\n`;
+
           await invoke("cmdop_send_input", {
-            apiKey: apiKeyRef.current,
             sessionId: cmdopSessionId,
-            data: `cd ${remote.remote_path} && ${cliCmd}\n`,
+            data: startCmd,
+            isBase64: false,
           });
-        } catch (err) {
-          terminal.writeln(`\x1b[31mFailed to start CLI: ${String(err)}\x1b[0m`);
         }
-      }
 
-      printPromptRef.current();
-    })();
+      } catch (err) {
+        terminal.writeln(`\x1b[31mConnection failed: ${String(err)}\x1b[0m`);
+        addErrorRef.current(
+          "Remote Terminal",
+          `Streaming failed: ${String(err)}`,
+          `Machine: ${remote.machine}`
+        );
+      }
+    };
+
+    startStream();
+
+    // Handle keyboard input — Direct passthrough
+    const inputDisposable = terminal.onData(async (data) => {
+      try {
+        await invoke("cmdop_send_input", {
+          sessionId: cmdopSessionId,
+          data,
+          isBase64: false,
+        });
+      } catch (err) {
+        console.error("Failed to send input:", err);
+      }
+    });
+
+    // Handle binary input (e.g. paste)
+    const binaryInputDisposable = terminal.onBinary(async (data: string) => {
+      try {
+        // Encode binary string to base64
+        const b64 = btoa(data);
+
+        await invoke("cmdop_send_input", {
+          sessionId: cmdopSessionId,
+          data: b64,
+          isBase64: true,
+        });
+      } catch (err) {
+        console.error("Failed to send binary input:", err);
+      }
+    });
+
 
     // Resize handling
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(async () => {
+        try {
+          fitAddon.fit();
+          const { cols, rows } = terminal;
+          await invoke("cmdop_resize_terminal", {
+            sessionId: cmdopSessionId,
+            cols,
+            rows,
+          });
+        } catch {
+          // ignore
+        }
+      }, 100);
+    };
+
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          if (resizeTimer) clearTimeout(resizeTimer);
-          resizeTimer = setTimeout(() => {
-            try {
-              fitAddon.fit();
-            } catch {
-              // ignore
-            }
-          }, 50);
+          handleResize();
         }
       }
     });
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      if (unlisten) unlisten();
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       inputDisposable.dispose();
+      binaryInputDisposable.dispose();
       ptyRegistry.unregister(sessionId);
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
       initializedRef.current = false;
+
+      // Stop the bridge process
+      invoke("cmdop_stop_stream", { sessionId: cmdopSessionId }).catch(console.error);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, cmdopSessionId, remote.machine]);
@@ -411,12 +267,20 @@ function RemoteTerminalInner({
     const timer = setTimeout(() => {
       try {
         fitAddonRef.current?.fit();
+        if (terminalRef.current) {
+          const { cols, rows } = terminalRef.current;
+          invoke("cmdop_resize_terminal", {
+            sessionId: cmdopSessionId,
+            cols,
+            rows,
+          }).catch(console.error);
+        }
       } catch {
         // ignore
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [isVisible]);
+  }, [isVisible, cmdopSessionId]);
 
   // Window resize
   useEffect(() => {
@@ -424,13 +288,21 @@ function RemoteTerminalInner({
       if (!isVisible) return;
       try {
         fitAddonRef.current?.fit();
+        if (terminalRef.current) {
+          const { cols, rows } = terminalRef.current;
+          invoke("cmdop_resize_terminal", {
+            sessionId: cmdopSessionId,
+            cols,
+            rows,
+          }).catch(console.error);
+        }
       } catch {
         // ignore
       }
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [isVisible]);
+  }, [isVisible, cmdopSessionId]);
 
   return (
     <div
@@ -444,6 +316,7 @@ function RemoteTerminalInner({
 /**
  * Layer 2: Connector — loads sessions via gRPC, finds matching machine.
  */
+
 function RemoteTerminalConnector(props: RemoteTerminalPaneProps) {
   const settings = useStore((s) => s.settings);
   const setShowSettings = useStore((s) => s.setShowSettings);
