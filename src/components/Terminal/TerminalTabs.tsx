@@ -257,24 +257,24 @@ export function TerminalTabs() {
   if (!activeProject) return null;
 
   return (
-    <div className="flex items-center bg-zinc-950/80 backdrop-blur-md border-b border-white/5 px-2 select-none h-12 sticky top-0 z-20">
-      {/* Project name badge */}
-      <div className="mr-3 px-3 py-1 bg-white/5 rounded-md border border-white/5">
-        <span className="font-medium text-sm text-zinc-300 truncate max-w-[120px]">
-          {activeProject.name}
-        </span>
-      </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      modifiers={[restrictToHorizontalAxis, restrictToWindowEdges]}
+    >
+      <div className="flex items-center bg-zinc-950/80 backdrop-blur-md border-b border-white/5 px-2 select-none h-12 sticky top-0 z-20">
+        {/* Project name badge */}
+        <div className="mr-3 px-3 py-1 bg-white/5 rounded-md border border-white/5">
+          <span className="font-medium text-sm text-zinc-300 truncate max-w-[120px]">
+            {activeProject.name}
+          </span>
+        </div>
 
-      <div className="h-5 w-px bg-white/10 mx-1" />
+        <div className="h-5 w-px bg-white/10 mx-1" />
 
-      <div className="flex-1 flex items-center gap-1.5 overflow-x-auto px-1 scrollbar-hide">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          modifiers={[restrictToHorizontalAxis, restrictToWindowEdges]}
-        >
+        <div className="flex-1 flex items-center gap-1.5 overflow-x-auto px-1 scrollbar-hide">
           <SortableContext items={projectSessions.map(s => s.id)} strategy={horizontalListSortingStrategy}>
             {projectSessions.map((session, idx) => (
               <SortableTabItem
@@ -297,94 +297,94 @@ export function TerminalTabs() {
               />
             ))}
           </SortableContext>
+        </div>
 
-          <DragOverlay dropAnimation={null}>
-            {activeId ? (
-              <TabItem
-                session={projectSessions.find(s => s.id === activeId)}
-                isActive={activeSessionId === activeId}
-                idx={projectSessions.findIndex(s => s.id === activeId)}
-                projectSessionsCount={projectSessions.length}
-                cliLabel={projectSessions.find(s => s.id === activeId)?.cli || "claude"}
-                onSelect={() => { }}
-                onClose={() => { }}
-                onTogglePrompt={() => { }}
-                showPromptQueue={showPromptQueue}
-                isOverlay
-              />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </div>
+        {/* Add session button */}
+        <button
+          onClick={handleAddClick}
+          onContextMenu={handleAddContextMenu}
+          onPointerDown={handleAddPointerDown}
+          onPointerUp={handleAddPointerUp}
+          onPointerLeave={handleAddPointerUp}
+          className="ml-2 w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-all duration-200"
+          title="New session (right-click for options)"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
 
-      {/* Add session button */}
-      <button
-        onClick={handleAddClick}
-        onContextMenu={handleAddContextMenu}
-        onPointerDown={handleAddPointerDown}
-        onPointerUp={handleAddPointerUp}
-        onPointerLeave={handleAddPointerUp}
-        className="ml-2 w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-all duration-200"
-        title="New session (right-click for options)"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-      </button>
+        <div className="w-px h-5 bg-white/10 mx-2" />
 
-      <div className="w-px h-5 bg-white/10 mx-2" />
+        {/* Prompt queue toggle */}
+        <button
+          onClick={() => setShowPromptQueue(!showPromptQueue)}
+          className={`
+            p-2 rounded-md transition-all duration-200
+            ${showPromptQueue
+              ? "text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/20"
+              : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+            }
+          `}
+          title={showPromptQueue ? "Hide prompts" : "Show prompt queue"}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+        </button>
 
-      {/* Prompt queue toggle */}
-      <button
-        onClick={() => setShowPromptQueue(!showPromptQueue)}
-        className={`
-          p-2 rounded-md transition-all duration-200
-          ${showPromptQueue
-            ? "text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/20"
-            : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
-          }
-        `}
-        title={showPromptQueue ? "Hide prompts" : "Show prompt queue"}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="8" y1="6" x2="21" y2="6"></line>
-          <line x1="8" y1="12" x2="21" y2="12"></line>
-          <line x1="8" y1="18" x2="21" y2="18"></line>
-          <line x1="3" y1="6" x2="3.01" y2="6"></line>
-          <line x1="3" y1="12" x2="3.01" y2="12"></line>
-          <line x1="3" y1="18" x2="3.01" y2="18"></line>
-        </svg>
-      </button>
-
-      {/* CLI menu popup */}
-      {cliMenu && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/10" onClick={() => setCliMenu(null)} />
-          <div
-            ref={menuRef}
-            className="fixed z-50 bg-zinc-900 border border-white/10 rounded-lg shadow-xl py-1 min-w-[200px] backdrop-blur-md animate-fade-in"
-            style={{ left: cliMenu.x, top: cliMenu.y }}
-          >
-            <div className="px-3 py-2 text-[10px] text-zinc-500 font-semibold uppercase tracking-wider border-b border-white/5 bg-zinc-950/30">
-              Launch New Session
+        {/* CLI menu popup */}
+        {cliMenu && (
+          <>
+            <div className="fixed inset-0 z-40 bg-black/10" onClick={() => setCliMenu(null)} />
+            <div
+              ref={menuRef}
+              className="fixed z-50 bg-zinc-900 border border-white/10 rounded-lg shadow-xl py-1 min-w-[200px] backdrop-blur-md animate-fade-in"
+              style={{ left: cliMenu.x, top: cliMenu.y }}
+            >
+              <div className="px-3 py-2 text-[10px] text-zinc-500 font-semibold uppercase tracking-wider border-b border-white/5 bg-zinc-950/30">
+                Launch New Session
+              </div>
+              {CLI_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  onClick={() => handleAddSession(preset.value)}
+                  className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-blue-500/10 hover:border-l-2 hover:border-blue-500 transition-all flex items-center gap-3 group"
+                >
+                  <span className="text-base group-hover:scale-110 transition-transform">{preset.icon}</span>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{preset.label}</span>
+                    <span className="text-[10px] text-zinc-600 font-mono">{preset.value}</span>
+                  </div>
+                </button>
+              ))}
             </div>
-            {CLI_PRESETS.map((preset) => (
-              <button
-                key={preset.value}
-                onClick={() => handleAddSession(preset.value)}
-                className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-blue-500/10 hover:border-l-2 hover:border-blue-500 transition-all flex items-center gap-3 group"
-              >
-                <span className="text-base group-hover:scale-110 transition-transform">{preset.icon}</span>
-                <div className="flex flex-col">
-                  <span className="font-medium">{preset.label}</span>
-                  <span className="text-[10px] text-zinc-600 font-mono">{preset.value}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+          </>
+        )}
+
+        <DragOverlay dropAnimation={null}>
+          {activeId ? (
+            <TabItem
+              session={projectSessions.find(s => s.id === activeId)}
+              isActive={activeSessionId === activeId}
+              idx={projectSessions.findIndex(s => s.id === activeId)}
+              projectSessionsCount={projectSessions.length}
+              cliLabel={projectSessions.find(s => s.id === activeId)?.cli || "claude"}
+              onSelect={() => { }}
+              onClose={() => { }}
+              onTogglePrompt={() => { }}
+              showPromptQueue={showPromptQueue}
+              isOverlay
+            />
+          ) : null}
+        </DragOverlay>
+      </div>
+    </DndContext>
   );
 }

@@ -295,31 +295,31 @@ export function Sidebar() {
   const activeProjectForOverlay = activeId ? (activeProjects.find(p => p.id === activeId) || null) : null;
 
   return (
-    <div
-      className="relative flex flex-col h-full bg-zinc-950 border-r border-white/5"
-      style={{ width }}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
     >
-      <div className="flex-shrink-0 p-5 flex items-center justify-between border-b border-white/5 bg-zinc-950/50 backdrop-blur-xl">
-        <h1 className="text-xs font-black tracking-[0.2em] text-zinc-100 uppercase">CMDOP</h1>
-        <button
-          onClick={() => {
-            setEditingProject(null);
-            setShowAddProject(true);
-          }}
-          className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-95"
-        >
-          <span className="text-xl">+</span>
-        </button>
-      </div>
+      <div
+        className="relative flex flex-col h-full bg-zinc-950 border-r border-white/5"
+        style={{ width }}
+      >
+        <div className="flex-shrink-0 p-5 flex items-center justify-between border-b border-white/5 bg-zinc-950/50 backdrop-blur-xl">
+          <h1 className="text-xs font-black tracking-[0.2em] text-zinc-100 uppercase">CMDOP</h1>
+          <button
+            onClick={() => {
+              setEditingProject(null);
+              setShowAddProject(true);
+            }}
+            className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 transition-all active:scale-95"
+          >
+            <span className="text-xl">+</span>
+          </button>
+        </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar pt-4 pb-12 no-scrollbar">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
-        >
+        <div className="flex-1 overflow-y-auto custom-scrollbar pt-4 pb-12 no-scrollbar">
           <div className="mb-8">
             <div className="px-5 mb-3 flex items-center justify-between">
               <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Active Projects</span>
@@ -346,104 +346,104 @@ export function Sidebar() {
             </SortableContext>
           </div>
 
-          <DragOverlay dropAnimation={{
-            sideEffects: defaultDropAnimationSideEffects({
-              styles: {
-                active: {
-                  opacity: '0.4',
-                },
-              },
-            }),
-          }}>
-            {activeProjectForOverlay ? (
-              <ProjectItem
-                project={activeProjectForOverlay}
-                isActiveProject={activeProjectId === activeProjectForOverlay.id}
-                isArchive={false}
-                isContextOpen={false}
-                hasSession={sessions.some((s) => s.projectId === activeProjectForOverlay.id)}
-                projectSessions={sessions.filter((s) => s.projectId === activeProjectForOverlay.id)}
-                remoteLabel={getRemoteLabel(activeProjectForOverlay)}
-                onClick={() => { }}
-                onContextMenu={() => { }}
-                isOverlay
-              />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-
-        {archivedProjects.length > 0 && (
-          <div className="opacity-50">
-            <div className="px-5 mb-3 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Archived</span>
+          {archivedProjects.length > 0 && (
+            <div className="opacity-50">
+              <div className="px-5 mb-3 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Archived</span>
+              </div>
+              {archivedProjects.map((p) => (
+                <ProjectItem
+                  key={p.id}
+                  project={p}
+                  isActiveProject={activeProjectId === p.id}
+                  isArchive={true}
+                  isContextOpen={contextMenu?.project.id === p.id}
+                  hasSession={sessions.some((s) => s.projectId === p.id)}
+                  projectSessions={sessions.filter((s) => s.projectId === p.id)}
+                  remoteLabel={getRemoteLabel(p)}
+                  onClick={() => handleProjectClick(p)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, project: p });
+                  }}
+                />
+              ))}
             </div>
-            {archivedProjects.map((p) => (
-              <ProjectItem
-                key={p.id}
-                project={p}
-                isActiveProject={activeProjectId === p.id}
-                isArchive={true}
-                isContextOpen={contextMenu?.project.id === p.id}
-                hasSession={sessions.some((s) => s.projectId === p.id)}
-                projectSessions={sessions.filter((s) => s.projectId === p.id)}
-                remoteLabel={getRemoteLabel(p)}
-                onClick={() => handleProjectClick(p)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ x: e.clientX, y: e.clientY, project: p });
-                }}
-              />
-            ))}
+          )}
+        </div>
+
+        <div
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/30 transition-colors"
+          onMouseDown={() => setIsResizing(true)}
+        />
+
+        <DragOverlay dropAnimation={{
+          sideEffects: defaultDropAnimationSideEffects({
+            styles: {
+              active: {
+                opacity: '0.4',
+              },
+            },
+          }),
+        }}>
+          {activeProjectForOverlay ? (
+            <ProjectItem
+              project={activeProjectForOverlay}
+              isActiveProject={activeProjectId === activeProjectForOverlay.id}
+              isArchive={false}
+              isContextOpen={false}
+              hasSession={sessions.some((s) => s.projectId === activeProjectForOverlay.id)}
+              projectSessions={sessions.filter((s) => s.projectId === activeProjectForOverlay.id)}
+              remoteLabel={getRemoteLabel(activeProjectForOverlay)}
+              onClick={() => { }}
+              onContextMenu={() => { }}
+              isOverlay
+            />
+          ) : null}
+        </DragOverlay>
+
+        {contextMenu && (
+          <div
+            className="fixed z-50 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl py-1.5 min-w-[180px] animate-in fade-in zoom-in duration-200"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={() => setContextMenu(null)}
+          >
+            <div className="px-3 py-1 border-b border-white/5 mb-1">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate block">
+                {contextMenu.project.name}
+              </span>
+            </div>
+            <button
+              onClick={() => handleEditProject(contextMenu.project)}
+              className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-blue-500/20 hover:text-white flex items-center gap-2 transition-colors font-medium"
+            >
+              ✏️ Edit Project
+            </button>
+            {!contextMenu.project.archived ? (
+              <button
+                onClick={() => handleArchiveProject(contextMenu.project.id)}
+                className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-blue-500/20 hover:text-white flex items-center gap-2 transition-colors font-medium"
+              >
+                📦 Archive Project
+              </button>
+            ) : (
+              <button
+                onClick={() => handleRestoreProject(contextMenu.project.id)}
+                className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-blue-500/20 hover:text-white flex items-center gap-2 transition-colors font-medium"
+              >
+                🔄 Restore Project
+              </button>
+            )}
+            <div className="h-px bg-white/5 my-1" />
+            <button
+              onClick={() => handleRemoveProject(contextMenu.project.id)}
+              className="w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-red-400/10 flex items-center gap-2 transition-colors font-bold"
+            >
+              🗑️ Delete Project
+            </button>
           </div>
         )}
       </div>
-
-      <div
-        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-500/30 transition-colors"
-        onMouseDown={() => setIsResizing(true)}
-      />
-
-      {contextMenu && (
-        <div
-          className="fixed z-50 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl py-1.5 min-w-[180px] animate-in fade-in zoom-in duration-200"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={() => setContextMenu(null)}
-        >
-          <div className="px-3 py-1 border-b border-white/5 mb-1">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest truncate block">
-              {contextMenu.project.name}
-            </span>
-          </div>
-          <button
-            onClick={() => handleEditProject(contextMenu.project)}
-            className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-blue-500/20 hover:text-white flex items-center gap-2 transition-colors font-medium"
-          >
-            ✏️ Edit Project
-          </button>
-          {!contextMenu.project.archived ? (
-            <button
-              onClick={() => handleArchiveProject(contextMenu.project.id)}
-              className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-blue-500/20 hover:text-white flex items-center gap-2 transition-colors font-medium"
-            >
-              📦 Archive Project
-            </button>
-          ) : (
-            <button
-              onClick={() => handleRestoreProject(contextMenu.project.id)}
-              className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-blue-500/20 hover:text-white flex items-center gap-2 transition-colors font-medium"
-            >
-              🔄 Restore Project
-            </button>
-          )}
-          <div className="h-px bg-white/5 my-1" />
-          <button
-            onClick={() => handleRemoveProject(contextMenu.project.id)}
-            className="w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-red-400/10 flex items-center gap-2 transition-colors font-bold"
-          >
-            🗑️ Delete Project
-          </button>
-        </div>
-      )}
-    </div>
+    </DndContext>
   );
 }
