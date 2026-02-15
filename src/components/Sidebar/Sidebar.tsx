@@ -377,31 +377,6 @@ export function Sidebar() {
           onMouseDown={() => setIsResizing(true)}
         />
 
-        <DragOverlay dropAnimation={{
-          sideEffects: defaultDropAnimationSideEffects({
-            styles: {
-              active: {
-                opacity: '0.4',
-              },
-            },
-          }),
-        }}>
-          {activeProjectForOverlay ? (
-            <ProjectItem
-              project={activeProjectForOverlay}
-              isActiveProject={activeProjectId === activeProjectForOverlay.id}
-              isArchive={false}
-              isContextOpen={false}
-              hasSession={sessions.some((s) => s.projectId === activeProjectForOverlay.id)}
-              projectSessions={sessions.filter((s) => s.projectId === activeProjectForOverlay.id)}
-              remoteLabel={getRemoteLabel(activeProjectForOverlay)}
-              onClick={() => { }}
-              onContextMenu={() => { }}
-              isOverlay
-            />
-          ) : null}
-        </DragOverlay>
-
         {contextMenu && (
           <div
             className="fixed z-50 bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl py-1.5 min-w-[180px] animate-in fade-in zoom-in duration-200"
@@ -444,6 +419,31 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      <DragOverlay dropAnimation={{
+        sideEffects: defaultDropAnimationSideEffects({
+          styles: {
+            active: {
+              opacity: '0.4',
+            },
+          },
+        }),
+      }}>
+        {activeProjectForOverlay ? (
+          <ProjectItem
+            project={activeProjectForOverlay}
+            isActiveProject={activeProjectId === activeProjectForOverlay.id}
+            isArchive={false}
+            isContextOpen={false}
+            hasSession={sessions.some((s) => s.projectId === activeProjectForOverlay.id)}
+            projectSessions={sessions.filter((s) => s.projectId === activeProjectForOverlay.id)}
+            remoteLabel={getRemoteLabel(activeProjectForOverlay)}
+            onClick={() => { }}
+            onContextMenu={() => { }}
+            isOverlay
+          />
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

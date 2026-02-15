@@ -367,24 +367,24 @@ export function TerminalTabs() {
             </div>
           </>
         )}
-
-        <DragOverlay dropAnimation={null}>
-          {activeId ? (
-            <TabItem
-              session={projectSessions.find(s => s.id === activeId)}
-              isActive={activeSessionId === activeId}
-              idx={projectSessions.findIndex(s => s.id === activeId)}
-              projectSessionsCount={projectSessions.length}
-              cliLabel={projectSessions.find(s => s.id === activeId)?.cli || "claude"}
-              onSelect={() => { }}
-              onClose={() => { }}
-              onTogglePrompt={() => { }}
-              showPromptQueue={showPromptQueue}
-              isOverlay
-            />
-          ) : null}
-        </DragOverlay>
       </div>
+
+      <DragOverlay dropAnimation={null}>
+        {activeId ? (
+          <TabItem
+            session={projectSessions.find(s => s.id === activeId)}
+            isActive={activeSessionId === activeId}
+            idx={projectSessions.findIndex(s => s.id === activeId)}
+            projectSessionsCount={projectSessions.length}
+            cliLabel={projectSessions.find(s => s.id === activeId)?.cli || "claude"}
+            onSelect={() => { }}
+            onClose={() => { }}
+            onTogglePrompt={() => { }}
+            showPromptQueue={showPromptQueue}
+            isOverlay
+          />
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

@@ -399,33 +399,33 @@ export function TaskPanel({ projectId }: TaskPanelProps) {
                         </div>
                     )}
                 </div>
-
-                <DragOverlay dropAnimation={{
-                    sideEffects: defaultDropAnimationSideEffects({
-                        styles: {
-                            active: {
-                                opacity: '0.4',
-                            },
-                        },
-                    }),
-                }}>
-                    {activeCardForOverlay ? (
-                        <TaskCardItem
-                            card={activeCardForOverlay}
-                            editingId={null}
-                            editTitle=""
-                            editDescription=""
-                            onEditTitleChange={() => { }}
-                            onEditDescriptionChange={() => { }}
-                            onSave={() => { }}
-                            onCancel={() => { }}
-                            onRemove={() => { }}
-                            onStartEdit={() => { }}
-                            isOverlay
-                        />
-                    ) : null}
-                </DragOverlay>
             </div>
-        </DndContext>
+
+            <DragOverlay dropAnimation={{
+                sideEffects: defaultDropAnimationSideEffects({
+                    styles: {
+                        active: {
+                            opacity: '0.4',
+                        },
+                    },
+                }),
+            }}>
+                {activeCardForOverlay ? (
+                    <TaskCardItem
+                        card={activeCardForOverlay}
+                        editingId={null}
+                        editTitle=""
+                        editDescription=""
+                        onEditTitleChange={() => { }}
+                        onEditDescriptionChange={() => { }}
+                        onSave={() => { }}
+                        onCancel={() => { }}
+                        onRemove={() => { }}
+                        onStartEdit={() => { }}
+                        isOverlay
+                    />
+                ) : null}
+            </DragOverlay>
+        </DndContext >
     );
 }
