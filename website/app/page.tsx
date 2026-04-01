@@ -27,24 +27,23 @@ export default function Home() {
                         <div className="absolute top-0 right-0 w-96 h-96 bg-accent/20 rounded-full blur-[100px] -mr-48 -mt-48" />
 
                         <div className="flex-1 relative z-10">
-                            <h2 className="text-3xl md:text-5xl font-black mb-6">Control agents from your phone</h2>
+                            <h2 className="text-3xl md:text-5xl font-black mb-6">Control agents from anywhere</h2>
                             <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-                                Powered by <strong>CMDOP SDK</strong>, CCAM allows you to securely reach your
-                                Claude sessions from any device. No port forwarding, no VPN. Just one
-                                click to stay in control.
+                                Connect via <strong>CMDOP SDK</strong> or <strong>SSH</strong>. Manage remote servers,
+                                reach your Claude sessions from any device. No port forwarding, no VPN.
                             </p>
                             <ul className="space-y-4 text-muted-foreground">
                                 <li className="flex items-center gap-3">
                                     <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs">✓</div>
-                                    <span>Secure WebSocket tunneling</span>
+                                    <span>CMDOP SDK with secure WebSocket tunneling</span>
                                 </li>
                                 <li className="flex items-center gap-3">
                                     <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs">✓</div>
-                                    <span>Full mobile-optimized terminal</span>
+                                    <span>SSH server management with key-based auth</span>
                                 </li>
                                 <li className="flex items-center gap-3">
                                     <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs">✓</div>
-                                    <span>Real-time output streaming</span>
+                                    <span>Real-time output streaming to mobile</span>
                                 </li>
                             </ul>
                         </div>

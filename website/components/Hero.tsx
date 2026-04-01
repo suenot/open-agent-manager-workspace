@@ -1,51 +1,112 @@
 'use client';
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Circle } from "lucide-react";
-import { cn } from "@/lib/utils";
 
-function ElegantShape({
-    className,
-    delay = 0,
-    width = 400,
-    height = 100,
-    rotate = 0,
-    gradient = "from-white/[0.08]",
-}: {
-    className?: string;
-    delay?: number;
-    width?: number;
-    height?: number;
-    rotate?: number;
-    gradient?: string;
-}) {
+function StarField() {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        let animationId: number;
+        let width = 0;
+        let height = 0;
+
+        interface Star {
+            x: number;
+            y: number;
+            size: number;
+            opacity: number;
+            speed: number;
+            pulse: number;
+            pulseSpeed: number;
+        }
+
+        const stars: Star[] = [];
+        const STAR_COUNT = 120;
+
+        function resize() {
+            width = canvas!.parentElement?.clientWidth || window.innerWidth;
+            height = canvas!.parentElement?.clientHeight || window.innerHeight;
+            canvas!.width = width * window.devicePixelRatio;
+            canvas!.height = height * window.devicePixelRatio;
+            canvas!.style.width = width + "px";
+            canvas!.style.height = height + "px";
+            ctx!.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        function initStars() {
+            stars.length = 0;
+            for (let i = 0; i < STAR_COUNT; i++) {
+                stars.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    size: Math.random() * 1.8 + 0.3,
+                    opacity: Math.random() * 0.6 + 0.1,
+                    speed: Math.random() * 0.15 + 0.02,
+                    pulse: Math.random() * Math.PI * 2,
+                    pulseSpeed: Math.random() * 0.01 + 0.005,
+                });
+            }
+        }
+
+        function draw() {
+            ctx!.clearRect(0, 0, width, height);
+
+            for (const star of stars) {
+                star.pulse += star.pulseSpeed;
+                star.y -= star.speed;
+
+                if (star.y < -5) {
+                    star.y = height + 5;
+                    star.x = Math.random() * width;
+                }
+
+                const flicker = Math.sin(star.pulse) * 0.3 + 0.7;
+                const alpha = star.opacity * flicker;
+
+                // Glow
+                ctx!.beginPath();
+                ctx!.arc(star.x, star.y, star.size * 3, 0, Math.PI * 2);
+                ctx!.fillStyle = `rgba(139, 132, 255, ${alpha * 0.15})`;
+                ctx!.fill();
+
+                // Core
+                ctx!.beginPath();
+                ctx!.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx!.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx!.fill();
+            }
+
+            animationId = requestAnimationFrame(draw);
+        }
+
+        resize();
+        initStars();
+        draw();
+
+        window.addEventListener("resize", () => {
+            resize();
+            initStars();
+        });
+
+        return () => {
+            cancelAnimationFrame(animationId);
+            window.removeEventListener("resize", resize);
+        };
+    }, []);
+
     return (
-        <motion.div
-            initial={{ opacity: 0, y: -150, rotate: rotate - 15 }}
-            animate={{ opacity: 1, y: 0, rotate }}
-            transition={{ duration: 2.4, delay, ease: [0.23, 0.86, 0.39, 0.96] as const, opacity: { duration: 1.2 } }}
-            className={cn("absolute", className)}
-        >
-            <motion.div
-                animate={{ y: [0, 15, 0] }}
-                transition={{ duration: 12, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                style={{ width, height }}
-                className="relative"
-            >
-                <div
-                    className={cn(
-                        "absolute inset-0 rounded-full",
-                        "bg-gradient-to-r to-transparent",
-                        gradient,
-                        "backdrop-blur-[2px] border-2 border-white/[0.15]",
-                        "shadow-[0_8px_32px_0_rgba(255,255,255,0.1)]",
-                        "after:absolute after:inset-0 after:rounded-full",
-                        "after:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.2),transparent_70%)]"
-                    )}
-                />
-            </motion.div>
-        </motion.div>
+        <canvas
+            ref={canvasRef}
+            className="absolute inset-0 pointer-events-none"
+        />
     );
 }
 
@@ -65,15 +126,11 @@ export function Hero() {
 
     return (
         <div className="relative min-h-[90vh] w-full flex items-center justify-center overflow-hidden bg-background">
-            <div className="absolute inset-0 bg-gradient-to-br from-accent/[0.05] via-transparent to-accent/[0.05] blur-3xl" />
+            {/* Subtle radial glow behind content */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-accent/[0.06] rounded-full blur-[120px] pointer-events-none" />
 
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <ElegantShape delay={0.3} width={600} height={140} rotate={12} gradient="from-accent/[0.15]" className="left-[-10%] md:left-[-5%] top-[15%] md:top-[20%]" />
-                <ElegantShape delay={0.5} width={500} height={120} rotate={-15} gradient="from-accent/[0.15]" className="right-[-5%] md:right-[0%] top-[70%] md:top-[75%]" />
-                <ElegantShape delay={0.4} width={300} height={80} rotate={-8} gradient="from-indigo-500/[0.15]" className="left-[5%] md:left-[10%] bottom-[5%] md:bottom-[10%]" />
-                <ElegantShape delay={0.6} width={200} height={60} rotate={20} gradient="from-violet-500/[0.15]" className="right-[15%] md:right-[20%] top-[10%] md:top-[15%]" />
-                <ElegantShape delay={0.7} width={150} height={40} rotate={-25} gradient="from-cyan-500/[0.15]" className="left-[20%] md:left-[25%] top-[5%] md:top-[10%]" />
-            </div>
+            {/* Star field */}
+            <StarField />
 
             <div className="relative z-10 container mx-auto px-4 md:px-6">
                 <div className="max-w-4xl mx-auto text-center">
@@ -85,23 +142,23 @@ export function Hero() {
                         className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent/[0.05] border border-accent/[0.1] mb-8 md:mb-12"
                     >
                         <Circle className="h-2 w-2 fill-accent animate-pulse" />
-                        <span className="text-xs md:text-sm font-medium text-accent-foreground/60 uppercase tracking-[0.2em]">Native macOS App</span>
+                        <span className="text-xs md:text-sm font-medium text-accent-foreground/60 uppercase tracking-[0.2em]">Desktop App for macOS</span>
                     </motion.div>
 
                     <motion.div custom={1} variants={fadeUpVariants} initial="hidden" animate="visible">
                         <h1 className="text-5xl sm:text-7xl md:text-8xl font-black mb-8 md:mb-10 tracking-tight leading-[1.1] text-foreground">
-                            Claude Agent
+                            Open Agent
                             <br />
                             <span className="bg-clip-text text-transparent bg-gradient-to-r from-accent via-foreground/90 to-accent/80">
-                                Manager.
+                                Manager
                             </span>
                         </h1>
                     </motion.div>
 
                     <motion.div custom={2} variants={fadeUpVariants} initial="hidden" animate="visible">
                         <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-12 leading-relaxed font-light tracking-wide max-w-2xl mx-auto">
-                            The ultimate terminal for parallel Claude Code sessions. Track tokens,
-                            manage projects, and access your agents from anywhere.
+                            The ultimate desktop terminal for parallel Claude Code sessions. Manage projects
+                            with drag-and-drop prompts, task boards, and remote access via CMDOP&nbsp;SDK&nbsp;or&nbsp;SSH.
                         </p>
                     </motion.div>
 

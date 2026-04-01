@@ -9,13 +9,13 @@ export function Navbar() {
         <nav className="fixed top-0 inset-x-0 z-50 bg-background/50 backdrop-blur-lg border-b border-border/50">
             <div className="container mx-auto px-4 h-20 flex items-center justify-between">
                 <Link href="/" className="flex items-center gap-3 group">
-                    <img src="/logo.svg" alt="CCAM Logo" className="w-10 h-10 group-hover:scale-110 transition-transform" />
-                    <span className="text-xl font-black tracking-tighter">CCAM</span>
+                    <img src="/logo.svg" alt="Open Agent Manager Logo" className="w-10 h-10 group-hover:scale-110 transition-transform" />
+                    <span className="text-xl font-black tracking-tighter">Open Agent Manager</span>
                 </Link>
 
                 <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
                     <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-                    <a href="#remote" className="hover:text-foreground transition-colors">Remote Access</a>
+                    <a href="#remote" className="hover:text-foreground transition-colors">Remote</a>
                     <a href="#" className="hover:text-foreground transition-colors">Documentation</a>
                 </div>
 

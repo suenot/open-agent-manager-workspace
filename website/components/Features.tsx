@@ -1,38 +1,38 @@
 'use client';
 
 import { motion } from "framer-motion";
-import { Layers, Smartphone, BarChart3, Terminal as TerminalIcon, FolderTree, Palette } from "lucide-react";
+import { Layers, Smartphone, Terminal as TerminalIcon, FolderTree, GripVertical, ListChecks } from "lucide-react";
 
 const features = [
     {
         icon: <Layers className="w-8 h-8" />,
         title: "Parallel Sessions",
-        description: "Run 10+ Claude Code agents simultaneously with zero context switching. Tabbed interface and split-views included."
-    },
-    {
-        icon: <Smartphone className="w-8 h-8" />,
-        title: "Remote Control",
-        description: "Integrated CMDOP support. Access your terminal, give prompts, and check status from your phone while on the go."
-    },
-    {
-        icon: <BarChart3 className="w-8 h-8" />,
-        title: "Token Metrics",
-        description: "Real-time tracking of input/output tokens and cost per session. Stay within your budget with automatic limits."
+        description: "Run multiple Claude Code agents simultaneously. Tabbed interface with split-views and per-project environment variables."
     },
     {
         icon: <TerminalIcon className="w-8 h-8" />,
-        title: "Native PTY",
-        description: "Built with Rust and portable-pty. Real terminal emulation, not a headless wrapper. Full interactive support."
+        title: "Real Terminal",
+        description: "True PTY processes, not a headless wrapper. Full interactive terminal with GPU-accelerated rendering."
     },
     {
         icon: <FolderTree className="w-8 h-8" />,
         title: "Project Manager",
-        description: "Sidebar with project tree, environment variables, and custom system prompts per project."
+        description: "Sidebar with project tree, import projects, archive inactive ones. Environment variables and prompt templates per project."
     },
     {
-        icon: <Palette className="w-8 h-8" />,
-        title: "Premium UI",
-        description: "Designed for macOS. Glassmorphism, smooth animations, and a highly customizable dark theme."
+        icon: <GripVertical className="w-8 h-8" />,
+        title: "Drag & Drop Prompts",
+        description: "Create reusable prompt templates and drag them into the active terminal. Reorder your prompt queue with dnd-kit."
+    },
+    {
+        icon: <ListChecks className="w-8 h-8" />,
+        title: "Task Boards",
+        description: "Built-in task cards per project with todo, in-progress, and done statuses. Track your agent work alongside the terminal."
+    },
+    {
+        icon: <Smartphone className="w-8 h-8" />,
+        title: "Remote Access",
+        description: "CMDOP SDK and SSH server support. Access your agents from your phone via secure WebSocket tunneling."
     }
 ];
 
@@ -43,7 +43,7 @@ export function Features() {
                 <div className="text-center mb-16">
                     <h2 className="text-3xl md:text-5xl font-black mb-4">Power to your agents</h2>
                     <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                        Everything you need to scale your development workflow with Anthropic's Claude Code.
+                        Everything you need to manage parallel Claude Code sessions from a single desktop app.
                     </p>
                 </div>
 

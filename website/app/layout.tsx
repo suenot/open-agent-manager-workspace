@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    title: "CCAM — Claude Code Agent Manager",
-    description: "Native macOS application for parallel management of multiple Claude Code interactive sessions.",
+    title: "Open Agent Manager — Parallel Claude Code Sessions",
+    description: "Desktop app for parallel Claude Code sessions with project management, drag-and-drop prompts, task boards, and remote access via CMDOP SDK or SSH.",
 };
 
 export default function RootLayout({

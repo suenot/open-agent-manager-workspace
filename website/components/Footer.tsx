@@ -22,18 +22,18 @@ export function Footer() {
                                 <div className="absolute inset-0 bg-accent/20 rounded-full blur-md group-hover:bg-accent/40 transition-colors" />
                                 <img
                                     src="/logo.svg"
-                                    alt="CCAM Logo"
+                                    alt="Open Agent Manager Logo"
                                     width={40}
                                     height={40}
                                     className="relative"
                                 />
                             </div>
                             <span className="text-2xl font-black tracking-tighter bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                                CCAM
+                                Open Agent Manager
                             </span>
                         </Link>
                         <p className="text-muted-foreground text-lg leading-relaxed max-w-sm">
-                            Native macOS application for parallel management of multiple Claude Code interactive sessions.
+                            Desktop app for managing parallel Claude Code sessions with project organization, drag-and-drop prompts, and remote access.
                         </p>
                         <div className="flex items-center gap-4">
                             <a href="https://t.me/suenot" className="w-12 h-12 rounded-2xl bg-muted/50 flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-all duration-300 group shadow-sm border border-border/50">
@@ -62,7 +62,7 @@ export function Footer() {
                 <div className="pt-12 border-t border-border flex flex-col md:flex-row justify-between items-center gap-8">
                     <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
                         <span className="text-sm text-muted-foreground font-medium">
-                            © {currentYear} CCAM. All rights reserved.
+                            © {currentYear} Open Agent Manager. All rights reserved.
                         </span>
                     </div>
 

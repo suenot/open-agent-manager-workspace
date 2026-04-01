@@ -3,8 +3,9 @@ node_modules/
 
 # Build output
 dist/
-src-tauri/target/
-src-tauri/gen/
+app/src-tauri/target/
+app/src-tauri/gen/
+website/.next/
 
 # Environment
 .env
@@ -24,6 +25,10 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
 
 # TypeScript
 *.tsbuildinfo
+
+# Playwright
+.playwright-mcp/
