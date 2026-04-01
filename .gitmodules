@@ -1,0 +1,6 @@
+[submodule "app"]
+	path = app
+	url = git@github.com:suenot/open-agent-manager.git
+[submodule "website"]
+	path = website
+	url = git@github.com:suenot/open-agent-manager-website.git
