@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+  build-tauri:
+    needs: get-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust_target: aarch64-apple-darwin
+            suffix: macos-arm64
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust_target: x86_64-apple-darwin
+            suffix: macos-x64
+          - platform: ubuntu-22.04
+            args: ''
+            rust_target: ''
+            suffix: linux-x64
+          - platform: windows-latest
+            args: ''
+            rust_target: ''
+            suffix: windows-x64
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm install
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tauriScript: npx tauri
+          args: ${{ matrix.args }}
+
+      - name: Rename artifacts (macOS)
+        if: startsWith(matrix.platform, 'macos')
+        env:
+          VERSION: ${{ needs.get-version.outputs.version }}
+          SUFFIX: ${{ matrix.suffix }}
+        run: |
+          DMG=$(find app/src-tauri/target -name "*.dmg" -type f | head -1)
+          if [ -n "$DMG" ]; then
+            cp "$DMG" "open-agent-manager-${VERSION}-${SUFFIX}.dmg"
+          fi
+
+      - name: Rename artifacts (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          VERSION: ${{ needs.get-version.outputs.version }}
+          SUFFIX: ${{ matrix.suffix }}
+        run: |
+          DEB=$(find app/src-tauri/target -name "*.deb" -type f | head -1)
+          APPIMAGE=$(find app/src-tauri/target -name "*.AppImage" -type f | head -1)
+          if [ -n "$DEB" ]; then
+            cp "$DEB" "open-agent-manager-${VERSION}-${SUFFIX}.deb"
+          fi
+          if [ -n "$APPIMAGE" ]; then
+            cp "$APPIMAGE" "open-agent-manager-${VERSION}-${SUFFIX}.AppImage"
+          fi
+
+      - name: Rename artifacts (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.get-version.outputs.version }}
+          SUFFIX: ${{ matrix.suffix }}
+        run: |
+          $MSI = Get-ChildItem -Path "app\src-tauri\target" -Recurse -Filter "*.msi" | Select-Object -First 1
+          $NSIS = Get-ChildItem -Path "app\src-tauri\target" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.DirectoryName -match "nsis" } | Select-Object -First 1
+          if ($MSI) {
+            Copy-Item $MSI.FullName "open-agent-manager-${env:VERSION}-${env:SUFFIX}.msi"
+          }
+          if ($NSIS) {
+            Copy-Item $NSIS.FullName "open-agent-manager-${env:VERSION}-${env:SUFFIX}-setup.exe"
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.suffix }}
+          path: |
+            open-agent-manager-*
+          if-no-files-found: warn
+
+  create-release:
+    needs: [get-version, build-tauri]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/ || echo "No artifacts directory"
+
+      - name: Extract changelog for this version
+        id: changelog
+        env:
+          VERSION: ${{ needs.get-version.outputs.version }}
+        run: |
+          CHANGELOG_FILE="docs/changelog/CHANGELOG.md"
+          if [ -f "$CHANGELOG_FILE" ]; then
+            # Extract the section for this version (between its ## header and the next ## header)
+            NOTES=$(sed -n "/^## v${VERSION} /,/^## v/{ /^## v${VERSION} /d; /^## v/d; p; }" "$CHANGELOG_FILE" | sed '/^$/d')
+            if [ -n "$NOTES" ]; then
+              # Use a delimiter for multiline output
+              echo "notes<<CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+              echo "$NOTES" >> "$GITHUB_OUTPUT"
+              echo "CHANGELOG_EOF" >> "$GITHUB_OUTPUT"
+            else
+              echo "notes=" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "notes=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.get-version.outputs.version }}
+          name: Open Agent Manager v${{ needs.get-version.outputs.version }}
+          draft: true
+          prerelease: false
+          files: artifacts/*
+          body: ${{ steps.changelog.outputs.notes }}
+          generate_release_notes: ${{ steps.changelog.outputs.notes == '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
