@@ -1,0 +1,18 @@
+# Agent worktrees (can be hundreds of MB)
+worktrees/
+
+# Sidecar caches (machine-specific, regenerated automatically)
+.sidecar/usage.json
+.sidecar/map_cache.json
+.sidecar/merkle_cache.json
+.sidecar/plugins_cache.json
+.sidecar/git_context.json
+.sidecar/suppressed.json
+.sidecar/scan.log
+.sidecar/fix_cache/
+
+# OS junk
+.DS_Store
+
+# Local settings (user-specific permissions)
+settings.local.json
